@@ -1,0 +1,13 @@
+prefix=/Users/pavcha/AWSBedrock/venv
+exec_prefix=/Users/pavcha/AWSBedrock/venv
+libdir=/Users/pavcha/AWSBedrock/venv/lib
+sharedlibdir=/Users/pavcha/AWSBedrock/venv/lib
+includedir=/Users/pavcha/AWSBedrock/venv/include
+
+Name: zlib
+Description: zlib compression library
+Version: 1.2.13
+
+Requires:
+Libs: -L${libdir} -L${sharedlibdir} -lz
+Cflags: -I${includedir}

@@ -1,0 +1,5 @@
+boto3
+awscli
+streamlit
+PyPDF2
+beautifulsoup4
