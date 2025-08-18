@@ -1,6 +1,4 @@
-#This script preprocesses text and PDF files from an S3 bucket, chunks the text, cleans it, and generates embeddings using AWS Bedrock.
-#It saves the processed data as a JSON file in the same S3 bucket.
-#This script is however used in a Lambda function that is triggered by an S3 event when new files are uploaded to /deleted from the bucket.
+# This script preprocesses text files from S3, chunks, cleans, embeds, and stores them in Pinecone (vector DB).
 
 import boto3
 import json
@@ -11,9 +9,33 @@ from bs4 import BeautifulSoup
 import time
 import botocore
 import urllib3
+import os
+from pinecone import Pinecone, ServerlessSpec
 
 # Disable SSL warnings for internal pages with self-signed certs
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Pinecone setup
+PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY", "pcsk_4bm3XF_NFihNS3Y7ejxGh4NRD7Jt9AYcxBNY39A2HnGWtLzLiYGgsanNxPAMZ5Qc58ee9H")
+PINECONE_REGION = os.environ.get("PINECONE_ENVIRONMENT", "us-east-1")  # e.g., "us-east-1"
+INDEX_NAME = "rag-chatbot-index"
+EMBEDDING_DIM = 1024  # Cohere v3 embedding size
+
+pc = Pinecone(api_key=PINECONE_API_KEY)
+
+# Create Pinecone index if it doesn't exist
+if INDEX_NAME not in pc.list_indexes().names():
+    pc.create_index(
+        name=INDEX_NAME,
+        dimension=EMBEDDING_DIM,
+        metric="cosine",
+        spec=ServerlessSpec(
+            cloud='aws',
+            region=PINECONE_REGION
+        )
+    )
+
+index = pc.Index(INDEX_NAME)
 
 s3 = boto3.client("s3")
 bucket = "test-bucket-chatbot-321"
@@ -38,7 +60,7 @@ def get_embedding(text, max_retries=5, delay=1):
             if error_code == "ThrottlingException":
                 print(f"Throttled. Waiting {delay} seconds before retrying...")
                 time.sleep(delay)
-                delay *= 2  # Exponential backoff
+                delay *= 2
             else:
                 print(f"Embedding failed: {e}")
                 break
@@ -67,10 +89,8 @@ def is_valid_chunk(chunk):
 
 def scrape_webpage(url):
     try:
-        # For internal/trusted pages, ignore SSL verification
         resp = requests.get(url, timeout=10, verify=False)
         soup = BeautifulSoup(resp.text, "html.parser")
-        # Remove scripts/styles
         for tag in soup(["script", "style"]):
             tag.decompose()
         text = soup.get_text(separator=" ")
@@ -78,8 +98,6 @@ def scrape_webpage(url):
     except Exception as e:
         print(f"Failed to scrape {url}: {e}")
         return ""
-
-kb_index = []
 
 objects = s3.list_objects_v2(Bucket=bucket)
 for obj in objects.get("Contents", []):
@@ -95,7 +113,7 @@ for obj in objects.get("Contents", []):
 
     print(f"Extracted text from {key}: {repr(text[:200])}")
     if text.strip():
-        for chunk in chunk_text(text):
+        for i, chunk in enumerate(chunk_text(text)):
             chunk = clean_chunk(chunk)
             if not is_valid_chunk(chunk):
                 continue
@@ -104,14 +122,17 @@ for obj in objects.get("Contents", []):
             try:
                 embedding = get_embedding(chunk)
                 if embedding is not None:
-                    kb_index.append({
-                        "chunk": chunk,
-                        "embedding": embedding,
-                        "source": key
-                    })
+                    vector_id = f"{key}:{i}"
+                    index.upsert([
+                        {
+                            "id": vector_id,
+                            "values": embedding,
+                            "metadata": {"chunk": chunk, "source": key}
+                        }
+                    ])
                 time.sleep(0.2)
             except Exception as e:
-                print(f"Embedding failed for chunk from {key}: {e}")
+                print(f"Embedding/Pinecone failed for chunk from {key}: {e}")
 
 # --- Web scraping section ---
 urls = [
@@ -125,7 +146,7 @@ for url in urls:
     text = scrape_webpage(url)
     print(f"Extracted text from {url}: {repr(text[:200])}")
     if text.strip():
-        for chunk in chunk_text(text):
+        for i, chunk in enumerate(chunk_text(text)):
             chunk = clean_chunk(chunk)
             if not is_valid_chunk(chunk):
                 continue
@@ -134,27 +155,16 @@ for url in urls:
             try:
                 embedding = get_embedding(chunk)
                 if embedding is not None:
-                    kb_index.append({
-                        "chunk": chunk,
-                        "embedding": embedding,
-                        "source": url
-                    })
+                    vector_id = f"{url}:{i}"
+                    index.upsert([
+                        {
+                            "id": vector_id,
+                            "values": embedding,
+                            "metadata": {"chunk": chunk, "source": url}
+                        }
+                    ])
                 time.sleep(0.2)
             except Exception as e:
-                print(f"Embedding failed for chunk from {url}: {e}")
+                print(f"Embedding/Pinecone failed for chunk from {url}: {e}")
 
-if kb_index:
-    try:
-        print(f"Saving {len(kb_index)} chunks to S3...")
-        s3.put_object(
-            Bucket=bucket,
-            Key="kb_index.json",
-            Body=json.dumps(kb_index).encode("utf-8")
-        )
-        print("kb_index.json successfully written to S3.")
-    except Exception as e:
-        print(f"Failed to write kb_index.json: {e}")
-else:
-    print("No valid chunks found. Not updating kb_index.json.")
-
-print(f"Final total chunks: {len(kb_index)}")
+print("Preprocessing and Pinecone upsert completed.")

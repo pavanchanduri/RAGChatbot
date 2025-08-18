@@ -1,12 +1,7 @@
 import boto3
 import json
-import math
-
-def cosine_similarity(a, b):
-    dot = sum(x*y for x, y in zip(a, b))
-    norm_a = math.sqrt(sum(x*x for x in a))
-    norm_b = math.sqrt(sum(x*x for x in b))
-    return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
+import os
+from pinecone import Pinecone
 
 # DynamoDB setup for conversation history
 dynamodb = boto3.resource("dynamodb")
@@ -19,38 +14,64 @@ def get_history(session_id):
 def save_history(session_id, history):
     history_table.put_item(Item={"session_id": session_id, "history": history})
 
-def lambda_handler(event, context):
-    prompt = event.get("prompt", "")
-    session_id = event.get("session_id", "default")
-    s3 = boto3.client("s3")
-    bucket = "test-bucket-chatbot-321"
-    region = "us-west-2"
-    bedrock = boto3.client("bedrock-runtime", region_name=region)
+# Pinecone setup
+PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY", "pcsk_4bm3XF_NFihNS3Y7ejxGh4NRD7Jt9AYcxBNY39A2HnGWtLzLiYGgsanNxPAMZ5Qc58ee9H")
+INDEX_NAME = "rag-chatbot-index"
+EMBEDDING_DIM = 1024  # Cohere v3 embedding size
 
-    # Load KB index from S3
-    kb_obj = s3.get_object(Bucket=bucket, Key="kb_index.json")
-    kb_index = json.loads(kb_obj["Body"].read().decode("utf-8"))
+pc = Pinecone(api_key=PINECONE_API_KEY)
+index = pc.Index(INDEX_NAME)
 
-    # Embed the user prompt using Cohere embed-english-v3
+def get_embedding(prompt, bedrock):
     embed_body = json.dumps({
         "texts": [prompt],
-        "input_type": "search_document"
+        "input_type": "search_query"
     })
     embed_response = bedrock.invoke_model(
         modelId="cohere.embed-english-v3",
         body=embed_body
     )
-    query_embedding = json.loads(embed_response["body"].read())["embeddings"][0]
+    return json.loads(embed_response["body"].read())["embeddings"][0]
 
-    # Find top-k most similar chunks
-    scored_chunks = []
-    for entry in kb_index:
-        score = cosine_similarity(query_embedding, entry["embedding"])
-        scored_chunks.append((score, entry["chunk"]))
-    scored_chunks.sort(reverse=True, key=lambda x: x[0])
-    top_chunks = [chunk for score, chunk in scored_chunks[:3]]  # Top 3
+def lambda_handler(event, context):
+    prompt = event.get("prompt", "")
+    session_id = event.get("session_id", "default")
+    region = "us-west-2"
+    bedrock = boto3.client("bedrock-runtime", region_name=region)
 
-    kb_context = "\n---\n".join(top_chunks)
+    if not prompt:
+        return {
+            "statusCode": 400,
+            "headers": {
+                "Access-Control-Allow-Origin": "*"
+            },
+            "body": json.dumps({"error": "No prompt provided"})
+        }
+
+    # Get embedding for the user prompt
+    query_embedding = get_embedding(prompt, bedrock)
+    if query_embedding is None:
+        return {
+            "statusCode": 500,
+            "headers": {
+                "Access-Control-Allow-Origin": "*"
+            },
+            "body": json.dumps({"error": "Failed to get embedding for prompt"})
+        }
+
+    # Query Pinecone for top 3 similar chunks
+    result = index.query(
+        vector=query_embedding,
+        top_k=3,
+        include_metadata=True
+    )
+
+    # Gather the retrieved chunks for context
+    context_chunks = []
+    for match in result['matches']:
+        context_chunks.append(match['metadata']['chunk'])
+
+    kb_context = "\n---\n".join(context_chunks)
 
     # Conversation history
     MAX_HISTORY = 10
