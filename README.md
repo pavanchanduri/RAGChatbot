@@ -68,7 +68,9 @@ RAGChatbot/
 
 1. **Run the chatbot:**
     ```sh
-    python src/main.py
+    1. The chatbot is integrated with AWS Lambda
+    2. The preprocessing Lambda runs when there is new data added in S3 and the embeddings are created and added to pinecone DB.
+    3. The chatbot html uses API Gateway to access the Lambda handler function that handles the chatbot interactions
     ```
 
 2. **Interact with the chatbot:**
