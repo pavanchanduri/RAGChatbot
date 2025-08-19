@@ -1,0 +1,15 @@
+Company Name: Acme Technologies Pvt. Ltd.
+Document Title: Business Ethics Policy
+Effective Date: April 1, 2022
+
+1. Integrity
+Employees are expected to conduct themselves with integrity in all business dealings.
+
+2. Conflict of Interest
+- Employees must disclose any personal or financial interests that conflict with company interests.
+
+3. Bribery
+- Offering or accepting bribes is strictly prohibited.
+
+4. Compliance
+- Violations will result in disciplinary action up to termination.

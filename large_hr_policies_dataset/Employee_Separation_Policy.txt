@@ -1,0 +1,15 @@
+Company Name: Acme Technologies Pvt. Ltd.
+Document Title: Employee Separation Policy
+Effective Date: October 1, 2022
+
+1. Resignation
+- Employees must provide a minimum of 30 days written notice.
+
+2. Termination
+- The company reserves the right to terminate employment due to misconduct, redundancy, or performance issues.
+
+3. Exit Interview
+- All separating employees must complete an exit interview with HR.
+
+4. Final Settlement
+- Full and final settlement will be processed within 45 days of separation.

@@ -1,0 +1,12 @@
+Company Name: Acme Technologies Pvt. Ltd.
+Document Title: Overtime Policy
+Effective Date: June 1, 2022
+
+1. Eligibility
+- Non-managerial employees are eligible for overtime pay.
+
+2. Rates
+- Overtime will be paid at 1.5x the hourly rate for hours exceeding 9 per day or 48 per week.
+
+3. Approval
+- Prior approval from the reporting manager is mandatory for overtime work.
