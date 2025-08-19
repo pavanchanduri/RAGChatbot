@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RAG Conversational Chatbot</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(120deg, #f8fafc 0%, #e0e7ef 100%);
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            padding: 32px 24px 24px 24px;
+        }
+        h2 {
+            text-align: center;
+            color: #1a237e;
+            margin-bottom: 24px;
+            letter-spacing: 1px;
+        }
+        #chat {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e3e8f0;
+            border-radius: 8px;
+            padding: 18px 12px;
+            background: #f4f7fb;
+            margin-bottom: 18px;
+            box-shadow: 0 1px 4px rgba(60,60,60,0.03);
+        }
+        .User, .Bot, .Loading {
+            margin: 12px 0;
+            padding: 10px 16px;
+            border-radius: 16px;
+            max-width: 80%;
+            word-break: break-word;
+            font-size: 1rem;
+            line-height: 1.5;
+            display: inline-block;
+            clear: both;
+        }
+        .User {
+            background: #e3f2fd;
+            color: #0d47a1;
+            align-self: flex-end;
+            float: right;
+            border-bottom-right-radius: 4px;
+        }
+        .Bot {
+            background: #ede7f6;
+            color: #4527a0;
+            align-self: flex-start;
+            float: left;
+            border-bottom-left-radius: 4px;
+            white-space: pre-line;
+            border-left: 4px solid #7e57c2;
+            box-shadow: 0 1px 6px rgba(69,39,160,0.04);
+        }
+        .Bot ul, .Bot ol {
+            margin: 8px 0 8px 24px;
+            padding: 0;
+        }
+        .Bot li {
+            margin-bottom: 4px;
+        }
+        .Loading {
+            background: #fffde7;
+            color: #f9a825;
+            align-self: flex-start;
+            float: left;
+            border-bottom-left-radius: 4px;
+            font-style: italic;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .Error {
+            background: #ffebee;
+            color: #b71c1c;
+            align-self: flex-start;
+            float: left;
+            border-bottom-left-radius: 4px;
+            font-style: italic;
+            padding: 10px 16px;
+            border-radius: 16px;
+            max-width: 80%;
+            margin: 12px 0;
+            display: inline-block;
+            clear: both;
+            border-left: 4px solid #e53935;
+        }
+        #input-area {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        #user-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #bdbdbd;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            transition: border 0.2s;
+        }
+        #user-input:focus {
+            border: 1.5px solid #1976d2;
+        }
+        #send-btn {
+            background: linear-gradient(90deg, #1976d2 60%, #512da8 100%);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 0 28px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
+        }
+        #send-btn:hover {
+            background: linear-gradient(90deg, #1565c0 60%, #4527a0 100%);
+        }
+        .spinner {
+            width: 22px;
+            height: 22px;
+            border: 3px solid #f9a825;
+            border-top: 3px solid #fffde7;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg);}
+            100% { transform: rotate(360deg);}
+        }
+        @media (max-width: 700px) {
+            .container { max-width: 98vw; padding: 10px; }
+            #chat { height: 250px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🤖 RAG Conversational Chatbot</h2>
+        <div id="chat"></div>
+        <div id="input-area">
+            <input id="user-input" type="text" placeholder="Type your message..." autocomplete="off" />
+            <button id="send-btn" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+    <script>
+        // Always generate a new session ID on page load
+        let sessionId = crypto.randomUUID();
+        localStorage.setItem("sessionId", sessionId);
+
+        // Clear conversation history on reload for a fresh session
+        localStorage.removeItem("conversationHistory");
+        let conversationHistory = [];
+
+        const chatDiv = document.getElementById("chat");
+
+        function formatBotResponse(text) {
+            // Convert numbered and bulleted lists to HTML lists
+            let html = text
+                .replace(/(\d+\.) (.+?)(?=(?:\n\d+\. |\n\n|$))/gs, '<li>$2</li>')
+                .replace(/- (.+?)(?=(?:\n- |\n\n|$))/gs, '<li>$1</li>');
+
+            // Wrap numbered lists in <ol>
+            html = html.replace(/(<li>.+?<\/li>)/gs, function(match) {
+                if (/^\d+\./.test(match)) {
+                    return `<ol>${match}</ol>`;
+                } else {
+                    return `<ul>${match}</ul>`;
+                }
+            });
+
+            // Replace double newlines with paragraph breaks
+            html = html.replace(/\n\n+/g, '</p><p>');
+            // Replace single newlines with <br>
+            html = html.replace(/\n/g, '<br>');
+            // Wrap in <p> if not already
+            if (!/^<ol>|^<ul>/.test(html)) {
+                html = `<p>${html}</p>`;
+            }
+            return html;
+        }
+
+        function appendMessage(sender, text) {
+            const messageElem = document.createElement("div");
+            messageElem.className = sender;
+            if (sender === "Bot") {
+                messageElem.innerHTML = formatBotResponse(text);
+            } else {
+                messageElem.textContent = text;
+            }
+            chatDiv.appendChild(messageElem);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+
+        function appendLoading() {
+            const loadingElem = document.createElement("div");
+            loadingElem.className = "Loading";
+            loadingElem.id = "loading-message";
+            loadingElem.innerHTML = `<span class="spinner"></span> <span>Thinking...</span>`;
+            chatDiv.appendChild(loadingElem);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+
+        function removeLoading() {
+            const loadingElem = document.getElementById("loading-message");
+            if (loadingElem) loadingElem.remove();
+        }
+
+        function appendErrorMessage(text) {
+            const errorElem = document.createElement("div");
+            errorElem.className = "Error";
+            errorElem.textContent = text;
+            chatDiv.appendChild(errorElem);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const userInputElem = document.getElementById("user-input");
+            const userInput = userInputElem.value.trim();
+            if (!userInput) return;
+
+            appendMessage("User", userInput);
+            conversationHistory.push({ sender: "User", text: userInput });
+            localStorage.setItem("conversationHistory", JSON.stringify(conversationHistory));
+            userInputElem.value = "";
+            userInputElem.disabled = true;
+            document.getElementById("send-btn").disabled = true;
+
+            appendLoading();
+
+            // Replace with your actual API Gateway endpoint for the Lambda function
+            const endpoint = "https://768pkrt7wb.execute-api.us-west-2.amazonaws.com/Test/ragchatbot";
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        prompt: userInput,
+                        session_id: sessionId
+                    })
+                });
+                const data = await response.json();
+                removeLoading();
+
+                // Robustly extract bot reply
+                let botReply = "";
+                let isThrottled = false;
+                if (data.response) {
+                    botReply = data.response;
+                } else if (data.body) {
+                    try {
+                        const inner = typeof data.body === "string" ? JSON.parse(data.body) : data.body;
+                        botReply = inner.response || (inner.error ? "Error: " + inner.error : "No response.");
+                        if (
+                            (inner.error && inner.error.toLowerCase().includes("too many requests")) ||
+                            (botReply && botReply.toLowerCase().includes("too many requests"))
+                        ) {
+                            isThrottled = true;
+                        }
+                    } catch {
+                        botReply = "No response.";
+                    }
+                } else if (data.error) {
+                    botReply = "Error: " + data.error;
+                    if (data.error.toLowerCase().includes("too many requests")) {
+                        isThrottled = true;
+                    }
+                } else {
+                    botReply = "No response.";
+                }
+
+                if (isThrottled) {
+                    appendErrorMessage("⚠️ The chatbot is receiving too many requests. Please wait a few seconds and try again.");
+                } else {
+                    appendMessage("Bot", botReply);
+                    conversationHistory.push({ sender: "Bot", text: botReply });
+                    localStorage.setItem("conversationHistory", JSON.stringify(conversationHistory));
+                }
+            } catch (err) {
+                removeLoading();
+                appendErrorMessage("⚠️ Error: Could not reach the chatbot backend.");
+            }
+            userInputElem.disabled = false;
+            document.getElementById("send-btn").disabled = false;
+            userInputElem.focus();
+        }
+
+        // Allow pressing Enter to send message
+        document.getElementById("user-input").addEventListener("keydown", function(e) {
+            if (e.key === "Enter") sendMessage();
+        });
+    </script>
+</body>
+</html>
