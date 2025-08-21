@@ -1,3 +1,23 @@
+"""
+MCP Defect Agent Test Runner
+---------------------------
+This file implements a standalone test runner that simulates API test cases and reports failures to the MCP Defect Agent (AWS Lambda-based).
+
+Purpose:
+- Use this script to simulate test failures and send defect reports to your deployed MCP Lambda endpoint (see mcp_server_lambda.py).
+- It demonstrates how a test automation suite can integrate with the MCP Defect Agent for automated defect logging and JIRA integration.
+- For each failed test, it sends a POST request to the /log-defect endpoint exposed by your API Gateway/Lambda setup.
+- Prints the response from the defect agent, including defect and JIRA issue details.
+
+When to use:
+- Use this file to validate your Lambda-based MCP defect logging pipeline end-to-end.
+- Adapt this script as a template for integrating real test automation frameworks with your MCP Defect Agent.
+
+Note:
+- This file is for demonstration and integration testing purposes.
+- For running your own MCP server (non-Lambda), see the Flask-based implementation if provided.
+"""
+
 import requests
 import json
 

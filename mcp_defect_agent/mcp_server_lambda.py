@@ -1,3 +1,29 @@
+"""
+MCP Defect Agent Lambda Server
+-----------------------------
+This file implements the AWS Lambda-based server for the MCP Defect Agent.
+
+Purpose:
+- Receives defect reports (typically from test automation or CI pipelines) via API Gateway.
+- Checks for duplicate defects in DynamoDB to avoid redundant logging.
+- Uses AWS Bedrock LLM to summarize the defect and determine severity.
+- Logs each unique defect to a DynamoDB table for tracking and analytics.
+- Automatically creates a JIRA issue for each new defect using the Atlassian REST API and Atlassian Document Format.
+
+How it works:
+- The Lambda handler expects a JSON payload with test failure details (test name, error, stack trace, etc.).
+- If the defect is unique, it is summarized, stored in DynamoDB, and logged in JIRA.
+- The Lambda returns a JSON response with defect and JIRA issue details.
+
+When to use:
+- Deploy this Lambda behind an API Gateway to enable automated, serverless defect logging and JIRA integration for your test automation ecosystem.
+- Integrate with test runners or CI/CD pipelines for end-to-end defect management.
+
+Note:
+- All configuration (DynamoDB table, JIRA credentials, etc.) is managed via environment variables for security and flexibility.
+- For local/server-based (non-Lambda) deployments, see the Flask-based implementation if provided.
+"""
+
 import json
 import os
 import boto3
