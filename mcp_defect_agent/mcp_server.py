@@ -1,3 +1,23 @@
+"""
+MCP Server (Flask-based)
+------------------------
+This file implements a standalone Model Context Protocol (MCP) server using Flask.
+
+Purpose:
+- Use this server if you do not want to use the AWS Lambda-based implementation (mcp_server_lambda.py).
+- It exposes a /log-defect HTTP endpoint to receive defect reports from MCP clients (such as test automation suites).
+- It summarizes the defect (simulated LLM, can be replaced with Bedrock integration).
+- It creates a JIRA issue for each defect.
+- Returns the created defect and JIRA issue details as a JSON response.
+
+When to use:
+- Use this file if you want to run the MCP server on your own infrastructure (VM, container, on-prem, etc.).
+- For serverless, scalable, and fully automated workflows, prefer mcp_server_lambda.py.
+
+Note:
+- This file is provided for reference and for environments where AWS Lambda is not available or not preferred.
+- You only need one MCP server implementation (Flask or Lambda) in production.
+"""
 import json
 import os
 from flask import Flask, request, jsonify
