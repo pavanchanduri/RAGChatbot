@@ -24,9 +24,10 @@ def run_tests():
         if result['status'] == 'failed':
             payload = json.dumps(result)
             # Replace with your API Gateway endpoint
-            url = 'https://your-api-gateway-endpoint.amazonaws.com/prod/log-defect'
+            url = 'https://vr6acrk273.execute-api.us-west-2.amazonaws.com/Test/log-defect'
             print(f"Would POST to {url}: {payload}")
-            # requests.post(url, data=payload, headers={'Content-Type': 'application/json'})
+            resp = requests.post(url, data=payload, headers={'Content-Type': 'application/json'})
+            print(resp.status_code, resp.text)
 
 if __name__ == '__main__':
     run_tests()
