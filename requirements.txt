@@ -6,3 +6,5 @@ beautifulsoup4
 psycopg2-binary
 pinecone
 flask
+selenium
+chromedriver-autoinstaller
