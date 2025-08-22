@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Internal Knowledge Chatbot</title>
+    <title>External Search Chatbot</title>
     <style>
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
@@ -12,11 +12,11 @@
         }
         #chatbot-fab {
             position: fixed;
-            right: 32px;
+            right: 32px; /* Changed from 112px to 32px */
             bottom: 32px;
             width: 64px;
             height: 64px;
-            background: linear-gradient(120deg, #388e3c 60%, #256029 100%);
+            background: linear-gradient(120deg, #1976d2 60%, #1251a3 100%);
             color: #fff;
             border: none;
             border-radius: 50%;
@@ -30,12 +30,12 @@
             transition: background 0.2s, box-shadow 0.2s;
         }
         #chatbot-fab:hover {
-            background: linear-gradient(120deg, #256029 60%, #388e3c 100%);
-            box-shadow: 0 8px 32px rgba(56, 142, 60, 0.18);
+            background: linear-gradient(120deg, #1251a3 60%, #1976d2 100%);
+            box-shadow: 0 8px 32px rgba(25, 118, 210, 0.18);
         }
         #chatbot-widget {
             position: fixed;
-            right: 32px;
+            right: 32px; /* Changed from 112px to 32px */
             bottom: 112px;
             width: 400px;
             max-width: 98vw;
@@ -52,7 +52,7 @@
             to { transform: translateY(0); opacity: 1; }
         }
         .chat-header {
-            background: linear-gradient(90deg, #388e3c 60%, #256029 100%);
+            background: linear-gradient(90deg, #1976d2 60%, #1251a3 100%);
             color: #fff;
             padding: 18px 20px;
             border-radius: 16px 16px 0 0;
@@ -92,21 +92,21 @@
             clear: both;
         }
         .User {
-            background: #e8f5e9;
-            color: #256029;
+            background: #e3f2fd;
+            color: #1251a3;
             align-self: flex-end;
             float: right;
             border-bottom-right-radius: 4px;
         }
         .Bot {
             background: #e0f2f1;
-            color: #388e3c;
+            color: #1976d2;
             align-self: flex-start;
             float: left;
             border-bottom-left-radius: 4px;
             white-space: pre-line;
-            border-left: 4px solid #388e3c;
-            box-shadow: 0 1px 6px rgba(56,142,60,0.04);
+            border-left: 4px solid #1976d2;
+            box-shadow: 0 1px 6px rgba(25,118,210,0.04);
         }
         .Bot ul, .Bot ol {
             margin: 8px 0 8px 24px;
@@ -158,10 +158,10 @@
             transition: border 0.2s;
         }
         #widget-user-input:focus {
-            border: 1.5px solid #388e3c;
+            border: 1.5px solid #1976d2;
         }
         #widget-send-btn {
-            background: linear-gradient(90deg, #388e3c 60%, #256029 100%);
+            background: linear-gradient(90deg, #1976d2 60%, #1251a3 100%);
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -169,10 +169,10 @@
             font-size: 1rem;
             cursor: pointer;
             transition: background 0.2s;
-            box-shadow: 0 2px 8px rgba(56, 142, 60, 0.08);
+            box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
         }
         #widget-send-btn:hover {
-            background: linear-gradient(90deg, #256029 60%, #388e3c 100%);
+            background: linear-gradient(90deg, #1251a3 60%, #1976d2 100%);
         }
         .spinner {
             width: 22px;
@@ -196,18 +196,18 @@
 <body>
     <!-- Floating Action Button -->
     <button id="chatbot-fab" title="Chat with us" onclick="openChatbot()">
-        💼
+        🌐
     </button>
 
     <!-- Chatbot Widget -->
     <div id="chatbot-widget">
         <div class="chat-header">
-            🏢 Internal Knowledge Chatbot
+            🌐 External Search Chatbot
             <button class="close-btn" onclick="closeChatbot()" title="Close">&times;</button>
         </div>
         <div id="widget-chat"></div>
         <div id="widget-input-area">
-            <input id="widget-user-input" type="text" placeholder="Ask about company policies..." autocomplete="off" />
+            <input id="widget-user-input" type="text" placeholder="Ask about general topics..." autocomplete="off" />
             <button id="widget-send-btn" type="button">Send</button>
         </div>
     </div>
@@ -240,9 +240,9 @@
             infoDiv.innerHTML = `
                 <b>Welcome!</b><br>
                 <span>
-                    <b>This chatbot uses <span style="color:#388e3c;">internal company knowledge base</span> only.</b><br>
-                    <span style="color:#888;">It does <u>not</u> use web search.<br>
-                    For general information, please use the external chatbot.</span>
+                    <b>This chatbot uses <span style="color:#1976d2;">external knowledge sources</span> (web search) only.</b><br>
+                    <span style="color:#888;">It does <u>not</u> have access to your company's internal knowledge base.<br>
+                    For company-specific or confidential information, please use the internal chatbot.</span>
                 </span>
             `;
             widgetChatDiv.appendChild(infoDiv);
@@ -316,8 +316,8 @@
 
             widgetAppendLoading();
 
-            // API endpoint for the internal chatbot
-            const endpoint = "https://768pkrt7wb.execute-api.us-west-2.amazonaws.com/Test/ragchatbot";
+            // API endpoint for the external chatbot
+            const endpoint = "https://mrp544dkv8.execute-api.us-west-2.amazonaws.com/Test/externalsearchchatbot";
 
             try {
                 const response = await fetch(endpoint, {
