@@ -1,0 +1,7 @@
+IT Security Policy
+
+1. Passwords: Employees must use strong passwords and update them every 90 days.
+2. Access Control: Access to company systems is restricted based on job roles.
+3. Data Protection: Employees must not share sensitive data without authorization.
+4. Devices: Only authorized devices may be connected to the company network.
+5. Reporting: Any security breach or suspicious activity must be reported immediately to IT.
