@@ -153,12 +153,43 @@ public class SelfHealingSeleniumAgent {
                         String byType = locatorParts[0].replace("By.", "").trim();
                         String value = locatorParts[1].trim().replaceAll("^['\"]|['\"]$", "");
                         System.out.println("Applying new locator and rerunning test: " + byType + ", " + value);
-                        Map<String, Object> rerunResult = runTest(byType, value);
-                        if (rerunResult == null) {
-                            System.out.println("Test passed after applying fix!");
-                            // Optionally, store fix in knowledge base
-                        } else {
-                            System.out.println("Test still failed after applying fix.");
+                        // Use past fixes before applying new suggestion
+                        boolean fixApplied = false;
+                        try {
+                            java.util.List<String> pastFixes = FixesStore.getPastFixes((String) result.get("error"));
+                            if (pastFixes != null && !pastFixes.isEmpty()) {
+                                System.out.println("Past fixes found for error: " + pastFixes);
+                                // Try the most recent past fix
+                                String pastLocator = pastFixes.get(pastFixes.size() - 1);
+                                if (pastLocator.contains(",")) {
+                                    String[] pastLocatorParts = pastLocator.split(",", 2);
+                                    String pastByType = pastLocatorParts[0].replace("By.", "").trim();
+                                    String pastValue = pastLocatorParts[1].trim().replaceAll("^['\"]|['\"]$", "");
+                                    System.out.println("Trying past fix locator: " + pastByType + ", " + pastValue);
+                                    Map<String, Object> pastFixResult = runTest(pastByType, pastValue);
+                                    if (pastFixResult == null) {
+                                        System.out.println("Test passed after applying past fix!");
+                                        fixApplied = true;
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            System.out.println("Could not retrieve or apply past fixes: " + e);
+                        }
+                        if (!fixApplied) {
+                            Map<String, Object> rerunResult = runTest(byType, value);
+                            if (rerunResult == null) {
+                                System.out.println("Test passed after applying Lambda suggestion!");
+                                // Store fix in knowledge base
+                                try {
+                                    FixesStore.saveFix("test_google_search_button", (String) result.get("error"), suggestion);
+                                    System.out.println("Fix saved to knowledge base.");
+                                } catch (Exception storeErr) {
+                                    System.out.println("Could not save fix to knowledge base: " + storeErr);
+                                }
+                            } else {
+                                System.out.println("Test still failed after applying Lambda suggestion.");
+                            }
                         }
                     } else {
                         System.out.println("No valid locator suggested by Lambda.");

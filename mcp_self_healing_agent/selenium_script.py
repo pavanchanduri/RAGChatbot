@@ -84,6 +84,11 @@ if __name__ == "__main__":
                 else:
                     print("Applying new locator and rerunning test:", new_locator)
                     try:
+                        # Check for past fixes before rerunning
+                        from mcp_self_healing_agent.fixes_store import save_fix, get_past_fixes
+                        past_fixes = get_past_fixes(result["error"])
+                        if past_fixes:
+                            print(f"Past fixes found for error: {past_fixes}")
                         by, value = new_locator.replace('By.', '').split(',', 1)
                         by = by.strip()
                         value = value.strip().strip('"').strip("'")
@@ -92,8 +97,8 @@ if __name__ == "__main__":
                             print("Test passed after applying fix!")
                             # Store fix in knowledge base
                             try:
-                                from mcp_self_healing_agent.fixes_store import save_fix
                                 save_fix("test_google_search_button", result["error"], suggestion)
+                                print("Fix saved to knowledge base.")
                             except Exception as store_err:
                                 print("Could not save fix to knowledge base:", store_err)
                         else:
