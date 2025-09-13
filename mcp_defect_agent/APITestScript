@@ -1,0 +1,101 @@
+package com.example;
+
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.HashMap;
+
+public class ApiDefectAgentTest {
+
+    /**
+     * Sends defect details to the AWS Lambda function via API Gateway
+     * The method works as follows:
+     * - Constructs a JSON payload with test details
+     * - Makes an HTTP POST request to the API Gateway endpoint
+     * - Reads and returns the response from the Lambda function    
+     * 
+     * @param testName Name of the test that failed
+     * @param error Error message
+     * @param stackTrace Stack trace of the error
+     * @return Response from the Lambda function
+     * @throws Exception if any network or serialization error occurs
+     */
+    public static String sendDefect(String testName, String error, String stackTrace) throws Exception {
+        String endpoint = "https://vr6acrk273.execute-api.us-west-2.amazonaws.com/Test/log-defect";
+        HashMap<String, String> payloadMap = new HashMap<>();
+        payloadMap.put("test_name", testName);
+        payloadMap.put("error", error);
+        payloadMap.put("stack_trace", stackTrace);
+
+        ObjectMapper mapper = new ObjectMapper();
+        String payload = mapper.writeValueAsString(payloadMap);
+
+        URL url = new URL(endpoint);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+
+        try (OutputStream os = conn.getOutputStream()) {
+            byte[] input = payload.getBytes(StandardCharsets.UTF_8);
+            os.write(input, 0, input.length);
+        }
+
+        int responseCode = conn.getResponseCode();
+        String response = new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        conn.disconnect();
+
+        System.out.println("Lambda Response: " + response);
+        return response;
+    }
+
+    /**
+     * Simulated API tests with defect logging
+     * The method works as follows:
+     * - Executes a passing API test (200 OK)
+     * - Executes a failing API test (500 Internal Server Error)
+     * - On failure, it calls the sendDefect method to log the defect
+     * - If defect logging is successful, it simulates a recovery action
+     * @param testData Map containing test parameters (not used in this simple example)
+     */
+    @Test
+    public static void apiTest(Map<String, String> testData) {
+        try {
+            // Pass test
+            URL passUrl = new URL("https://httpbin.org/status/200");
+            HttpURLConnection passConn = (HttpURLConnection) passUrl.openConnection();
+            passConn.setRequestMethod("GET");
+            int passStatus = passConn.getResponseCode();
+            if (passStatus == 200) {
+                System.out.println("API Pass test executed.");
+            }
+            passConn.disconnect();
+
+            // Fail test
+            URL failUrl = new URL("https://httpbin.org/status/500");
+            HttpURLConnection failConn = (HttpURLConnection) failUrl.openConnection();
+            failConn.setRequestMethod("GET");
+            int failStatus = failConn.getResponseCode();
+            if (failStatus == 500) {
+                String response = sendDefect(
+                    "api_test_status_500",
+                    "500 Internal Server Error",
+                    "Stack trace details here"
+                );
+                if (response.contains("Defect logged")) {
+                    System.out.println("Defect logged, taking recovery action...");
+                }
+            }
+            failConn.disconnect();
+        } catch (Exception e) {
+            e.printStackTrace();
+            try {
+                sendDefect("api_test_status_500", e.getMessage(), e.toString());
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+    }
+}

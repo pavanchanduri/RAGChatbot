@@ -1,0 +1,174 @@
+package com.example;
+
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.By;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.NoSuchElementException;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.HashMap;
+import java.util.Map;
+
+public class SelfHealingSeleniumAgent {
+
+    /**
+     * Runs a Selenium test with optional locator override.
+     * If the test fails, it captures error details and returns them.
+     * The method works as follows:
+     * 1. Navigate to the Google homepage.
+     * 2. Accept cookies if the prompt appears.
+     * 3. Enter text in the search box.
+     * 4. Try to click the search button using the provided locator or a default failing locator.
+     * 5. If the test passes, it returns null.
+     * 6. If the test fails, it captures the error message, stack trace, and DOM snapshot, then returns them in a map.
+     * 
+     * @param byType The type of locator (e.g., "id", "xpath"). If null, uses default failing locator.
+     * @param locator The locator value. If null, uses default failing locator.
+     * @return null if test passes, or a map with error details if it fails.
+     */
+    public static Map<String, Object> runTest(String byType, String locator) {
+
+        WebDriver driver = new ChromeDriver();
+        Map<String, Object> context = new HashMap<>();
+        try {
+            driver.get("https://www.google.com");
+            // Accept cookies if present (optional)
+            try {
+                WebElement consent = driver.findElement(By.id("L2AGLb"));
+                consent.click();
+                Thread.sleep(1000);
+            } catch (Exception ignore) {}
+
+            // Enter text in the search box
+            WebElement searchBox = driver.findElement(By.name("q"));
+            searchBox.clear();
+            searchBox.sendKeys("Self healing automation agent");
+
+            // Try to click search button using provided locator or default (which will fail)
+            if (byType != null && locator != null) {
+                By by = getBy(byType, locator);
+                driver.findElement(by).click();
+            } else {
+                // Intentionally incorrect locator for Google Search button
+                driver.findElement(By.id("nonexistent-google-search-btn")).click();
+            }
+            System.out.println("Test passed: Search button clicked.");
+            driver.quit();
+            return null;
+        } catch (Exception e) {
+            System.out.println("Test failed!");
+            System.out.println("Error: " + e.getMessage());
+            e.printStackTrace();
+            String domSnapshot = "N/A";
+            try {
+                domSnapshot = driver.getPageSource();
+            } catch (Exception ex) {}
+            context.put("test_name", "test_google_search_button");
+            context.put("error", e.getMessage());
+            context.put("stack_trace", e.toString());
+            context.put("dom_snapshot", domSnapshot);
+            driver.quit();
+            return context;
+        }
+    }
+
+    /**
+     * Sends defect details to the MCP Defect Agent via API Gateway.
+     * The method constructs a JSON payload with test name, error message, and stack trace,
+     * then sends it as a POST request to the specified API Gateway endpoint.
+     * It reads and returns the response from the MCP Defect Agent.
+     * @param testName The name of the test where the defect occurred.
+     * @param error The error message or description of the defect.
+     * @param stackTrace The stack trace or additional details about the defect.
+     * @return The response from the MCP Defect Agent as a string.
+     * @throws Exception if any network or IO error occurs.
+     */
+    public static By getBy(String byType, String locator) {
+        switch (byType.toLowerCase()) {
+            case "id": return By.id(locator);
+            case "name": return By.name(locator);
+            case "xpath": return By.xpath(locator);
+            case "cssselector": return By.cssSelector(locator);
+            case "classname": return By.className(locator);
+            case "tagname": return By.tagName(locator);
+            case "linktext": return By.linkText(locator);
+            case "partiallinktext": return By.partialLinkText(locator);
+            default: throw new IllegalArgumentException("Unknown locator type: " + byType);
+        }
+    }
+
+    /**
+     * Sends defect details to the MCP Self Healing Agent via API Gateway.
+     * The method constructs a JSON payload with test name, error message, and stack trace,
+     * then sends it as a POST request to the specified API Gateway endpoint.
+     * It reads and returns the response from the MCP Self Healing Agent.
+     *
+     * @param testName The name of the test where the defect occurred.
+     * @param error The error message or description of the defect.
+     * @param stackTrace The stack trace or additional details about the defect.
+     * @return The response from the MCP Self Healing Agent as a string.
+     * @throws Exception if any network or IO error occurs.
+     */
+    public static void selfHeal(String[] args) throws Exception {
+        Map<String, Object> result = runTest(null, null);
+        if (result != null) {
+            // Send to Lambda via API Gateway
+            String apiUrl = "https://ervo9cueok.execute-api.us-west-2.amazonaws.com/Test/self-heal";
+            ObjectMapper mapper = new ObjectMapper();
+            String payload = mapper.writeValueAsString(result);
+            System.out.println("Payload being sent to Lambda: " + payload);
+            URL url = new URL(apiUrl);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+            try (OutputStream os = conn.getOutputStream()) {
+                byte[] input = payload.getBytes(StandardCharsets.UTF_8);
+                os.write(input, 0, input.length);
+            }
+            String response = new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            System.out.println("Lambda suggestion (raw): " + response);
+
+            // Parse new locator if available
+            // (Assume response is JSON with keys: body, new_locator, suggestion)
+            try {
+                Map<String, Object> responseMap = mapper.readValue(response, Map.class);
+                Object bodyObj = responseMap.get("body");
+                Map<String, Object> bodyMap = null;
+                if (bodyObj instanceof String) {
+                    bodyMap = mapper.readValue((String) bodyObj, Map.class);
+                } else if (bodyObj instanceof Map) {
+                    bodyMap = (Map<String, Object>) bodyObj;
+                }
+                if (bodyMap != null) {
+                    String newLocator = (String) bodyMap.get("new_locator");
+                    String suggestion = (String) bodyMap.get("suggestion");
+                    System.out.println("Full Lambda suggestion text: " + suggestion);
+                    if (newLocator != null && newLocator.contains(",")) {
+                        String[] locatorParts = newLocator.split(",", 2);
+                        String byType = locatorParts[0].replace("By.", "").trim();
+                        String value = locatorParts[1].trim().replaceAll("^['\"]|['\"]$", "");
+                        System.out.println("Applying new locator and rerunning test: " + byType + ", " + value);
+                        Map<String, Object> rerunResult = runTest(byType, value);
+                        if (rerunResult == null) {
+                            System.out.println("Test passed after applying fix!");
+                            // Optionally, store fix in knowledge base
+                        } else {
+                            System.out.println("Test still failed after applying fix.");
+                        }
+                    } else {
+                        System.out.println("No valid locator suggested by Lambda.");
+                    }
+                } else {
+                    System.out.println("No valid body in Lambda response.");
+                }
+            } catch (Exception parseErr) {
+                System.out.println("Could not parse or apply new locator: " + parseErr);
+            }
+        }
+    }
+}

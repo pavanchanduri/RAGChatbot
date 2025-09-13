@@ -42,6 +42,10 @@ JIRA_API_TOKEN = os.environ.get('JIRA_API_TOKEN')
 JIRA_PROJECT_KEY = os.environ.get('JIRA_PROJECT_KEY')
 print(f"JIRA_URL: {JIRA_URL}, JIRA_USER: {JIRA_USER}, JIRA_PROJECT_KEY: {JIRA_PROJECT_KEY}")
 
+"""
+Summarize failure using AWS Bedrock LLM
+The method constructs a prompt with test failure details and invokes the Bedrock model to generate a defect summary.
+"""
 def summarize_failure(test_name, error, stack_trace=None):
     print(f"Summarizing failure for test: {test_name}, error: {error}")
     bedrock = boto3.client("bedrock-runtime", region_name="us-west-2")
@@ -89,6 +93,10 @@ def summarize_failure(test_name, error, stack_trace=None):
             'severity': 'High' if '500' in error else 'Medium'
         }
 
+"""
+Create JIRA issue using Atlassian REST API
+The method constructs the issue payload in Atlassian Document Format and sends a POST request to create the issue.
+"""
 def create_jira_issue(summary, description, severity):
     print(f"Creating JIRA issue with summary: {summary}, severity: {severity}")
     url = f"{JIRA_URL}/rest/api/3/issue"
@@ -126,6 +134,11 @@ def create_jira_issue(summary, description, severity):
     else:
         return {"error": response.text, "status": response.status_code}
 
+"""
+AWS Lambda handler for MCP Defect Agent
+The method processes incoming defect reports, checks for duplicates, 
+summarizes defects, logs them to DynamoDB, and creates JIRA issues.
+"""
 def lambda_handler(event, context):
     print(f"Received event: {json.dumps(event)}")
     print(f"Event type: {type(event)}")

@@ -1,0 +1,126 @@
+package com.example;
+
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.By;
+import org.openqa.selenium.NoSuchElementException;
+import org.openqa.selenium.TimeoutException;
+import org.openqa.selenium.InvalidSelectorException;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.HashMap;
+
+public class SeleniumDefectAgentTest {
+
+    /**
+     * Sends defect details to the AWS Lambda function via API Gateway.
+     * The method works as follows:
+     * 1. Constructs a JSON payload with the defect details.
+     * 2. Makes an HTTP POST request to the API Gateway endpoint.
+     * 3. Returns the response from the Lambda function.
+     *
+     * @param testName Name of the test case
+     * @param error Short error description
+     * @param stackTrace Detailed stack trace or error message
+     * @return Response from the Lambda function
+     * @throws Exception if any network or IO error occurs
+     */
+    public static String sendDefect(String testName, String error, String stackTrace) throws Exception {
+        String endpoint = "https://vr6acrk273.execute-api.us-west-2.amazonaws.com/Test/log-defect"
+        HashMap<String, String> payloadMap = new HashMap<>();
+        payloadMap.put("test_name", testName);
+        payloadMap.put("error", error);
+        payloadMap.put("stack_trace", stackTrace);
+
+        ObjectMapper mapper = new ObjectMapper();
+        String payload = mapper.writeValueAsString(payloadMap);
+
+        OutputStream os = null;
+        try {
+            URL url = new URL(endpoint);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+
+            os = conn.getOutputStream();
+            byte[] input = payload.getBytes(StandardCharsets.UTF_8);
+            os.write(input);
+            os.close();
+
+            int responseCode = conn.getResponseCode();
+            String response = new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            conn.disconnect();
+
+            System.out.println("Lambda Response: " + response);
+            return response;
+        } finally {
+            if (os != null) os.close();
+        }
+    }
+
+    /**
+     * Main method to run Selenium tests and report defects.
+     * The method works as follows:
+     * 1. Initializes the Chrome WebDriver.
+     * 2. Runs a series of Selenium tests, some of which are designed to fail.
+     * 3. Catches exceptions from failed tests and sends defect reports using sendDefect().
+     * 4. Cleans up and closes the WebDriver.
+     *
+     * @param testData Map containing test parameters (not used in this example)
+     * @throws Exception if any unexpected error occurs
+     */
+    @Test
+    public static void testSeleniumDefectAgent(Map<String, String> testData) {
+
+        WebDriverManager.chromedriver().setup();
+        WebDriver driver = new ChromeDriver();
+        try {
+            driver.get("https://www.example.com");
+
+            // Pass test: Find a valid element
+            try {
+                driver.findElement(By.tagName("h1")).isDisplayed();
+                System.out.println("Pass test: h1 element found and displayed.");
+            } catch (NoSuchElementException e) {
+                sendDefect("selenium_test_h1_missing", "h1 element not found", e.toString());
+            }
+
+            // Fail test: Try to find a non-existent element
+            try {
+                driver.findElement(By.id("nonexistent-element")).isDisplayed();
+            } catch (NoSuchElementException e) {
+                sendDefect("selenium_test_nonexistent_element", "Element with id 'nonexistent-element' not found", e.toString());
+            }
+
+            // Fail test: Use an invalid selector
+            try {
+                driver.findElement(By.xpath("//*[")); // Invalid XPath
+            } catch (InvalidSelectorException e) {
+                sendDefect("selenium_test_invalid_selector", "Invalid XPath selector used", e.toString());
+            }
+
+            // Fail test: Simulate a timeout (if using explicit waits, not shown here)
+            // Example:
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(1));
+            try {
+                wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("slow-element")));
+            } catch (TimeoutException e) {
+                sendDefect("selenium_test_timeout", "Timeout waiting for element", e.toString());
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            try {
+                sendDefect("selenium_test_unexpected_error", e.getMessage(), e.toString());
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        } finally {
+            driver.quit();
+        }
+    }
+}
