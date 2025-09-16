@@ -1,0 +1,25 @@
+@startuml RAGPreprocessingScript
+class RAGPreprocessingScript {
+    - s3: boto3.client
+    - bucket: str
+    - bedrock: boto3.client
+    - pc: Pinecone
+    - index: Pinecone.Index
+    - PINECONE_API_KEY: str
+    - PINECONE_REGION: str
+    - INDEX_NAME: str
+    - EMBEDDING_DIM: int
+    - MAX_CHUNK_LENGTH: int
+    + get_embedding(text, max_retries, delay)
+    + chunk_text(text, chunk_size)
+    + clean_chunk(chunk)
+    + is_valid_chunk(chunk)
+    + scrape_webpage(url)
+}
+
+RAGPreprocessingScript : get_embedding() --> bedrock
+RAGPreprocessingScript : scrape_webpage() --> requests
+RAGPreprocessingScript : chunk_text() --> clean_chunk()
+RAGPreprocessingScript : chunk_text() --> is_valid_chunk()
+RAGPreprocessingScript : upsert --> index
+@enduml

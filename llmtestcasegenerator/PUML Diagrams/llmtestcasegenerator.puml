@@ -1,0 +1,37 @@
+@startuml LLMTestCaseGenerator
+title LLM Test Case Generator Lambda Flow
+
+start
+
+:Receive Lambda event with body, filename, sessionId;
+:Parse and decode input (base64 if needed);
+
+if (Document provided?) then (yes)
+    :Extract text from document;
+    if (filename ends with .txt) then (yes)
+        :Use raw text;
+    else if (filename ends with .docx) then (yes)
+        :Call extract_text_from_docx();
+    else if (filename ends with .pdf) then (yes)
+        :Call extract_text_from_pdf();
+    else (no)
+        :Use raw text;
+    endif
+else (no)
+    :Return error (no document provided);
+    stop
+endif
+
+:Get recent conversation history from DynamoDB;
+:Compose prompt for Claude (history + requirements/specifications);
+
+:Invoke Bedrock Claude model;
+if (Claude response success?) then (yes)
+    :Update and save conversation history in DynamoDB;
+    :Return generated test cases to user;
+else (no)
+    :Return error (Claude response failed);
+endif
+
+stop
+@enduml

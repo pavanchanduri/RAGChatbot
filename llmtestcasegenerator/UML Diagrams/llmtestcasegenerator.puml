@@ -1,0 +1,17 @@
+@startuml LLMTestCaseGenerator
+title LLM Test Case Generator Lambda Flow
+class LLMTestCaseGeneratorLambda {
+    - dynamodb: boto3.resource
+    - history_table: Table
+    + get_history(session_id)
+    + save_history(session_id, history)
+    + extract_text_from_docx(docx_bytes)
+    + extract_text_from_pdf(pdf_bytes)
+    + lambda_handler(event, context)
+}
+
+LLMTestCaseGeneratorLambda : lambda_handler() --> get_history()
+LLMTestCaseGeneratorLambda : lambda_handler() --> save_history()
+LLMTestCaseGeneratorLambda : lambda_handler() --> extract_text_from_docx()
+LLMTestCaseGeneratorLambda : lambda_handler() --> extract_text_from_pdf()
+@enduml

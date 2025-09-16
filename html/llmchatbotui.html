@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>🤖 LLM Test Case Generator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css?family=Roboto:500,700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(135deg, #e3f0fd 0%, #f8e8ff 100%);
+      font-family: 'Roboto', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .main-card {
+      background: #fff;
+      border-radius: 24px;
+      box-shadow: 0 8px 40px #0002;
+      max-width: 700px;
+      width: 100%;
+      padding: 0 0 28px 0;
+      margin: 32px 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 80vh;
+      border: 2.5px solid #e3f0fd;
+      position: relative;
+    }
+    .header {
+      padding: 36px 0 18px 0;
+      text-align: center;
+      background: linear-gradient(90deg, #1a73e8 60%, #9c27b0 100%);
+      border-radius: 24px 24px 0 0;
+      color: #fff;
+      box-shadow: 0 2px 16px #1a73e81a;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      text-shadow: 0 2px 8px #0002;
+    }
+    .header p {
+      margin: 10px 0 0 0;
+      font-size: 1.09rem;
+      opacity: 0.97;
+      font-weight: 400;
+      letter-spacing: 0.2px;
+    }
+    .chat-area {
+      flex: 1;
+      background: #f6f8fc;
+      border-radius: 18px;
+      margin: 0 28px;
+      padding: 28px 18px 18px 18px;
+      min-height: 320px;
+      overflow-y: auto;
+      box-sizing: border-box;
+      border: 1.5px solid #e3f0fd;
+      margin-top: 24px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 12px #1a73e81a;
+    }
+    .message-row {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 18px;
+      gap: 12px;
+    }
+    .msg-bot, .msg-user {
+      padding: 13px 18px;
+      border-radius: 14px;
+      font-size: 1.07rem;
+      max-width: 80%;
+      line-height: 1.6;
+      word-break: break-word;
+      white-space: pre-wrap;
+      box-shadow: 0 2px 8px #0001;
+      font-family: 'Roboto', sans-serif;
+      transition: background 0.2s;
+    }
+    .msg-bot {
+      background: linear-gradient(120deg, #e8f5e9 80%, #e3f0fd 100%);
+      color: #256029;
+      border-bottom-left-radius: 4px;
+      border: 1.5px solid #b2dfdb;
+      position: relative;
+    }
+    .msg-user {
+      background: linear-gradient(120deg, #e3f0fd 80%, #ede7f6 100%);
+      color: #1a73e8;
+      margin-left: auto;
+      border-bottom-right-radius: 4px;
+      border: 1.5px solid #90caf9;
+      position: relative;
+    }
+    .msg-bot:before {
+      content: "🤖";
+      position: absolute;
+      left: -36px;
+      top: 8px;
+      font-size: 1.3rem;
+      opacity: 0.8;
+    }
+    .msg-user:after {
+      content: "🧑";
+      position: absolute;
+      right: -36px;
+      top: 8px;
+      font-size: 1.3rem;
+      opacity: 0.8;
+    }
+    .msg-bot ol, .msg-bot ul {
+      margin-top: 0;
+      margin-bottom: 0;
+      padding-left: 22px;
+    }
+    .msg-bot li {
+      margin-bottom: 2px;
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 24px 28px 0 28px;
+    }
+    .chat-input {
+      flex: 1;
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: 1.5px solid #e0e0e0;
+      font-size: 1.09rem;
+      outline: none;
+      background: #f9fafc;
+      transition: border 0.2s;
+      box-shadow: 0 2px 8px #0001;
+    }
+    .chat-input:focus {
+      border: 1.5px solid #1a73e8;
+      background: #fff;
+    }
+    .send-btn {
+      background: linear-gradient(90deg, #1a73e8 60%, #9c27b0 100%);
+      color: #fff;
+      border: none;
+      padding: 14px 32px;
+      border-radius: 12px;
+      font-size: 1.09rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+      box-shadow: 0 2px 8px #0001;
+      letter-spacing: 0.5px;
+    }
+    .send-btn:disabled {
+      background: #b0bec5;
+      cursor: not-allowed;
+    }
+    .file-upload-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 18px 28px 0 28px;
+    }
+    .file-input {
+      flex: 1;
+      font-size: 1rem;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1.5px solid #cfd8dc;
+      background: #f9fafc;
+      transition: border 0.2s;
+    }
+    .file-input:focus {
+      border: 1.5px solid #1a73e8;
+      background: #fff;
+    }
+    .upload-btn {
+      background: linear-gradient(90deg, #43e97b 0%, #38f9d7 100%);
+      color: #1a237e;
+      border: none;
+      padding: 12px 22px;
+      border-radius: 10px;
+      font-size: 1.01rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      box-shadow: 0 2px 8px #0001;
+    }
+    .upload-btn:disabled {
+      background: #b0bec5;
+      color: #fff;
+      cursor: not-allowed;
+    }
+    .loader {
+      display: none;
+      margin: 0 auto 18px auto;
+      border: 6px solid #e3f0fd;
+      border-top: 6px solid #1a73e8;
+      border-radius: 50%;
+      width: 38px;
+      height: 38px;
+      animation: spin 1s linear infinite;
+    }
+    .loader.active {
+      display: block;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg);}
+      100% { transform: rotate(360deg);}
+    }
+    @media (max-width: 700px) {
+      .main-card { max-width: 99vw; }
+      .chat-area, .input-row, .file-upload-row { margin: 0 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="main-card">
+    <div class="header">
+      <h1>🤖 LLM Test Case Generator</h1>
+      <p>Upload requirements or chat to generate, clarify, and enhance test cases with AI.</p>
+    </div>
+    <form class="file-upload-row" id="uploadForm" autocomplete="off">
+      <input type="file" class="file-input" id="fileInput" accept=".txt,.pdf,.docx" required>
+      <button class="upload-btn" id="generateBtn" type="submit">Upload & Generate</button>
+    </form>
+    <div class="loader" id="loader"></div>
+    <div class="chat-area" id="chatArea"></div>
+    <form class="input-row" id="chatForm" autocomplete="off" style="display:none;">
+      <input class="chat-input" id="chatInput" type="text" placeholder="Type your message..." autocomplete="off">
+      <button class="send-btn" id="sendBtn" type="submit">Send</button>
+    </form>
+  </div>
+  <script>
+    const chatArea = document.getElementById('chatArea');
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const uploadForm = document.getElementById('uploadForm');
+    const fileInput = document.getElementById('fileInput');
+    const generateBtn = document.getElementById('generateBtn');
+    const loader = document.getElementById('loader');
+    let sessionId = localStorage.getItem('sessionId') || '';
+
+    function appendMessage(role, text) {
+      const row = document.createElement('div');
+      row.className = 'message-row';
+      const bubble = document.createElement('div');
+      bubble.className = role === 'user' ? 'msg-user' : 'msg-bot';
+      bubble.innerHTML = role === 'user' ? escapeHtml(text) : formatBotResponse(text);
+      row.appendChild(bubble);
+      chatArea.appendChild(row);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/[&<>"']/g, function(m) {
+        return ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[m];
+      });
+    }
+
+    // Improved formatting for bot response with correct sublist handling and spacing
+    function formatBotResponse(text) {
+      let html = escapeHtml(text);
+
+      // Remove duplicate numbering/lettering (e.g., "1. 1. ..." -> "1. ...", "a. a. ..." -> "a. ...")
+      html = html.replace(/(\d+\.)\s+\1/g, '$1');
+      html = html.replace(/([a-z]\.)\s+\1/g, '$1');
+
+      // Insert a newline before subpoints (a., b., c., etc.) only if not already at line start
+      html = html.replace(/([^.\n])\s([a-z]\. )/g, '$1\n$2');
+
+      // Numbered lists (1., 2., 3.)
+      html = html.replace(/(?:^|\n)(\d+\.\s[^\n]+)/g, function(match, p1) {
+        return `<li>${p1.trim()}</li>`;
+      });
+
+      // Sub-lists (a., b., c.) only if at start of line
+      html = html.replace(/(?:^|\n)([a-z]\.\s[^\n]+)/g, function(match, p1) {
+        return `<li style="list-style-type: lower-alpha; margin-left: 22px;">${p1.trim()}</li>`;
+      });
+
+      // Bulleted lists (- Item)
+      html = html.replace(/(?:^|\n)(-\s[^\n]+)/g, function(match, p1) {
+        return `<li>${p1.trim()}</li>`;
+      });
+
+      // Wrap consecutive sublist <li> in <ul>
+      html = html.replace(/((<li style="list-style-type: lower-alpha; margin-left: 22px;">.*?<\/li>\s*){2,})/gs, function(match) {
+        return `<ul style="list-style-type: lower-alpha; margin-left: 22px; margin-top:0; margin-bottom:0;">${match}</ul>`;
+      });
+
+      // Wrap consecutive <li> in <ol> or <ul>
+      html = html.replace(/((<li>(?![a-z]\.).*?<\/li>\s*){2,})/gs, function(match) {
+        return match.match(/<li>\d+\./) ? `<ol style="margin-top:0;margin-bottom:0;">${match}</ol>` : `<ul style="margin-top:0;margin-bottom:0;">${match}</ul>`;
+      });
+
+      // Paragraphs: replace double line breaks with </p><p>
+      html = html.replace(/\n{2,}/g, '</p><p>');
+      html = `<p style="margin:0;">${html}</p>`;
+      html = html.replace(/<p>\s*<\/p>/g, ''); // Remove empty paragraphs
+
+      // Remove single line breaks inside paragraphs
+      html = html.replace(/([^\n])\n([^\n])/g, '$1 $2');
+
+      return html;
+    }
+
+    uploadForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      appendMessage('user', `Uploaded file: ${file.name}`);
+      loader.classList.add('active');
+      generateBtn.disabled = true;
+
+      let documentContent = '';
+      if (file.name.endsWith('.txt')) {
+        documentContent = await file.text();
+      } else {
+        const reader = new FileReader();
+        documentContent = await new Promise(resolve => {
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      const payload = {
+        document: documentContent,
+        filename: file.name,
+        sessionId: sessionId
+      };
+
+      fetch('https://9mvgbuu4f1.execute-api.us-west-2.amazonaws.com/Test/generate-testcases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(res => res.json())
+      .then(data => {
+        loader.classList.remove('active');
+        generateBtn.disabled = false;
+        if (data.testCases) {
+          if (data.sessionId) {
+            sessionId = data.sessionId;
+            localStorage.setItem('sessionId', sessionId);
+          }
+          appendMessage('bot', data.testCases);
+          // Show chat area for followups
+          chatForm.style.display = 'flex';
+          uploadForm.style.display = 'none';
+        } else if (data.error) {
+          appendMessage('bot', "Error: " + data.error);
+        } else {
+          appendMessage('bot', "Unexpected response from server.");
+        }
+      })
+      .catch(err => {
+        loader.classList.remove('active');
+        generateBtn.disabled = false;
+        appendMessage('bot', "Error: " + err.message);
+      });
+
+      fileInput.value = '';
+    });
+
+    chatForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const message = chatInput.value.trim();
+      if (!message) return;
+      appendMessage('user', message);
+      sendBtn.disabled = true;
+      loader.classList.add('active');
+
+      const payload = {
+        document: message,
+        filename: "followup.txt",
+        sessionId: sessionId
+      };
+
+      fetch('https://9mvgbuu4f1.execute-api.us-west-2.amazonaws.com/Test/generate-testcases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(res => res.json())
+      .then(data => {
+        loader.classList.remove('active');
+        sendBtn.disabled = false;
+        if (data.testCases) {
+          if (data.sessionId) {
+            sessionId = data.sessionId;
+            localStorage.setItem('sessionId', sessionId);
+          }
+          appendMessage('bot', data.testCases);
+        } else if (data.error) {
+          appendMessage('bot', "Error: " + data.error);
+        } else {
+          appendMessage('bot', "Unexpected response from server.");
+        }
+      })
+      .catch(err => {
+        loader.classList.remove('active');
+        sendBtn.disabled = false;
+        appendMessage('bot', "Error: " + err.message);
+      });
+
+      chatInput.value = '';
+    });
+  </script>
+</body>
+</html>
