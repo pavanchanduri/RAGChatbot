@@ -143,7 +143,7 @@ def lambda_handler(event, context):
     }
     request = json.dumps(native_request)
     try:
-        print("Invoking Bedrock...")
+        print("Invoking Bedrock for test case generation...")
         response = bedrock.invoke_model(
             modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
             body=request
@@ -151,6 +151,31 @@ def lambda_handler(event, context):
         model_response = json.loads(response["body"].read())
         response_text = model_response["content"][0]["text"]
         print("Bedrock response (first 200 chars):", response_text[:200])
+
+        # Validation step: Ask Claude to review the generated test cases
+        validation_prompt = (
+            "You are an expert QA engineer. Review the following test cases for correctness, completeness, and relevance. Point out any issues or improvements.\n\n"
+            f"{response_text}"
+        )
+        validation_request = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 2048,
+            "temperature": 0.2,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": validation_prompt}],
+                }
+            ],
+        }
+        print("Invoking Bedrock for test case validation...")
+        validation_response = bedrock.invoke_model(
+            modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
+            body=json.dumps(validation_request)
+        )
+        validation_model_response = json.loads(validation_response["body"].read())
+        validation_text = validation_model_response["content"][0]["text"]
+        print("Validation feedback (first 200 chars):", validation_text[:200])
 
         # Update and save conversation history
         history.append({"user": extracted_text, "bot": response_text})
@@ -161,7 +186,8 @@ def lambda_handler(event, context):
             "headers": {"Access-Control-Allow-Origin": "*"},
             "body": json.dumps({
                 "sessionId": session_id,
-                "testCases": response_text
+                "testCases": response_text,
+                "validationFeedback": validation_text
             })
         }
     except Exception as e:

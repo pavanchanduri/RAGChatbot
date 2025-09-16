@@ -8,10 +8,12 @@ class LLMTestCaseGeneratorLambda {
     + extract_text_from_docx(docx_bytes)
     + extract_text_from_pdf(pdf_bytes)
     + lambda_handler(event, context)
+    + validate_testcases(testcases)
 }
 
 LLMTestCaseGeneratorLambda : lambda_handler() --> get_history()
 LLMTestCaseGeneratorLambda : lambda_handler() --> save_history()
 LLMTestCaseGeneratorLambda : lambda_handler() --> extract_text_from_docx()
 LLMTestCaseGeneratorLambda : lambda_handler() --> extract_text_from_pdf()
+LLMTestCaseGeneratorLambda : lambda_handler() --> validate_testcases()
 @enduml

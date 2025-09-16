@@ -1,4 +1,10 @@
 # This script preprocesses text files from S3, chunks, cleans, embeds, and stores them in Pinecone (vector DB).
+#
+# AWS EventBridge can be used to schedule this Lambda/script to run at regular intervals (e.g., hourly, daily).
+# This ensures the script scrapes and updates the Pinecone index for webpage changes, not just S3 changes.
+# Steps: Create an EventBridge rule with a schedule, set the Lambda as the target, and verify scheduled execution.
+#
+
 
 import boto3
 import json
@@ -99,72 +105,88 @@ def scrape_webpage(url):
         print(f"Failed to scrape {url}: {e}")
         return ""
 
-objects = s3.list_objects_v2(Bucket=bucket)
-for obj in objects.get("Contents", []):
-    key = obj["Key"]
-    if key == "kb_index.json":
-        continue
-    if key.strip().lower().endswith(".txt"):
-        print(f"Processing text file: {key}")
-        file_obj = s3.get_object(Bucket=bucket, Key=key)
-        text = file_obj["Body"].read().decode("utf-8")
+
+# --- Trigger type logic ---
+import sys
+def is_s3_trigger(event=None):
+    # S3 event will have 'Records' and 's3' keys
+    if event and isinstance(event, dict):
+        return 'Records' in event and 's3' in event['Records'][0]
+    return False
+
+def main(event=None):
+    if is_s3_trigger(event):
+        print("S3 trigger detected: Indexing S3 content only.")
+        objects = s3.list_objects_v2(Bucket=bucket)
+        for obj in objects.get("Contents", []):
+            key = obj["Key"]
+            if key == "kb_index.json":
+                continue
+            if key.strip().lower().endswith(".txt"):
+                print(f"Processing text file: {key}")
+                file_obj = s3.get_object(Bucket=bucket, Key=key)
+                text = file_obj["Body"].read().decode("utf-8")
+            else:
+                continue
+            print(f"Extracted text from {key}: {repr(text[:200])}")
+            if text.strip():
+                for i, chunk in enumerate(chunk_text(text)):
+                    chunk = clean_chunk(chunk)
+                    if not is_valid_chunk(chunk):
+                        continue
+                    if len(chunk) > MAX_CHUNK_LENGTH:
+                        chunk = chunk[:MAX_CHUNK_LENGTH]
+                    try:
+                        embedding = get_embedding(chunk)
+                        if embedding is not None:
+                            vector_id = f"{key}:{i}"
+                            index.upsert([
+                                {
+                                    "id": vector_id,
+                                    "values": embedding,
+                                    "metadata": {"chunk": chunk, "source": key}
+                                }
+                            ])
+                        time.sleep(0.2)
+                    except Exception as e:
+                        print(f"Embedding/Pinecone failed for chunk from {key}: {e}")
     else:
-        continue
+        print("Scheduled/EventBridge trigger detected: Indexing web content only.")
+        urls = [
+            "https://en.wikipedia.org/wiki/Amazon_Web_Services",
+            "https://w.amazon.com/bin/view/Transportation/Passport/Passport_QA_Process/"
+            # Add more URLs as needed
+        ]
+        for url in urls:
+            print(f"Scraping web page: {url}")
+            text = scrape_webpage(url)
+            print(f"Extracted text from {url}: {repr(text[:200])}")
+            if text.strip():
+                for i, chunk in enumerate(chunk_text(text)):
+                    chunk = clean_chunk(chunk)
+                    if not is_valid_chunk(chunk):
+                        continue
+                    if len(chunk) > MAX_CHUNK_LENGTH:
+                        chunk = chunk[:MAX_CHUNK_LENGTH]
+                    try:
+                        embedding = get_embedding(chunk)
+                        if embedding is not None:
+                            vector_id = f"{url}:{i}"
+                            index.upsert([
+                                {
+                                    "id": vector_id,
+                                    "values": embedding,
+                                    "metadata": {"chunk": chunk, "source": url}
+                                }
+                            ])
+                        time.sleep(0.2)
+                    except Exception as e:
+                        print(f"Embedding/Pinecone failed for chunk from {url}: {e}")
+    print("Preprocessing and Pinecone upsert completed.")
 
-    print(f"Extracted text from {key}: {repr(text[:200])}")
-    if text.strip():
-        for i, chunk in enumerate(chunk_text(text)):
-            chunk = clean_chunk(chunk)
-            if not is_valid_chunk(chunk):
-                continue
-            if len(chunk) > MAX_CHUNK_LENGTH:
-                chunk = chunk[:MAX_CHUNK_LENGTH]
-            try:
-                embedding = get_embedding(chunk)
-                if embedding is not None:
-                    vector_id = f"{key}:{i}"
-                    index.upsert([
-                        {
-                            "id": vector_id,
-                            "values": embedding,
-                            "metadata": {"chunk": chunk, "source": key}
-                        }
-                    ])
-                time.sleep(0.2)
-            except Exception as e:
-                print(f"Embedding/Pinecone failed for chunk from {key}: {e}")
+# Lambda handler or script entry point
+def lambda_handler(event, context):
+    main(event)
 
-# --- Web scraping section ---
-urls = [
-    "https://en.wikipedia.org/wiki/Amazon_Web_Services",
-    "https://w.amazon.com/bin/view/Transportation/Passport/Passport_QA_Process/"
-    # Add more URLs as needed
-]
-
-for url in urls:
-    print(f"Scraping web page: {url}")
-    text = scrape_webpage(url)
-    print(f"Extracted text from {url}: {repr(text[:200])}")
-    if text.strip():
-        for i, chunk in enumerate(chunk_text(text)):
-            chunk = clean_chunk(chunk)
-            if not is_valid_chunk(chunk):
-                continue
-            if len(chunk) > MAX_CHUNK_LENGTH:
-                chunk = chunk[:MAX_CHUNK_LENGTH]
-            try:
-                embedding = get_embedding(chunk)
-                if embedding is not None:
-                    vector_id = f"{url}:{i}"
-                    index.upsert([
-                        {
-                            "id": vector_id,
-                            "values": embedding,
-                            "metadata": {"chunk": chunk, "source": url}
-                        }
-                    ])
-                time.sleep(0.2)
-            except Exception as e:
-                print(f"Embedding/Pinecone failed for chunk from {url}: {e}")
-
-print("Preprocessing and Pinecone upsert completed.")
+if __name__ == "__main__":
+    main()

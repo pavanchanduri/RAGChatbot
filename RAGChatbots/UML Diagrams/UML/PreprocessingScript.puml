@@ -15,6 +15,9 @@ class RAGPreprocessingScript {
     + clean_chunk(chunk)
     + is_valid_chunk(chunk)
     + scrape_webpage(url)
+    + is_s3_trigger(event)
+    + main(event)
+    + lambda_handler(event, context)
 }
 
 RAGPreprocessingScript : get_embedding() --> bedrock
@@ -22,4 +25,6 @@ RAGPreprocessingScript : scrape_webpage() --> requests
 RAGPreprocessingScript : chunk_text() --> clean_chunk()
 RAGPreprocessingScript : chunk_text() --> is_valid_chunk()
 RAGPreprocessingScript : upsert --> index
+RAGPreprocessingScript : lambda_handler() --> main()
+RAGPreprocessingScript : main() --> is_s3_trigger()
 @enduml

@@ -28,7 +28,12 @@ endif
 :Invoke Bedrock Claude model;
 if (Claude response success?) then (yes)
     :Update and save conversation history in DynamoDB;
-    :Return generated test cases to user;
+    :Invoke Bedrock Claude model for validation of test cases;
+    if (Validation response success?) then (yes)
+        :Return generated test cases and validation feedback to user;
+    else (no)
+        :Return generated test cases with validation error;
+    endif
 else (no)
     :Return error (Claude response failed);
 endif
