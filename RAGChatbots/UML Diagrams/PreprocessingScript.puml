@@ -1,0 +1,63 @@
+@startuml PreprocessingScript
+title RAG Preprocessing Script Flow
+
+start
+
+:Read Pinecone API key, region, and embedding dimension;
+:Initialize Pinecone client;
+:Create Pinecone index if not exists;
+:Initialize S3 and Bedrock clients;
+
+partition "S3 Text File Processing" {
+    :List objects in S3 bucket;
+    :For each object in bucket;
+    if (Is .txt file?) then (yes)
+        :Read and decode text;
+        :Chunk text;
+        :For each chunk;
+            :Clean chunk;
+            :Validate chunk;
+            if (Valid?) then (yes)
+                :Truncate if > MAX_CHUNK_LENGTH;
+                :Get embedding from Bedrock;
+                if (Embedding success?) then (yes)
+                    :Upsert embedding to Pinecone with metadata;
+                else (no)
+                    :Log embedding error;
+                endif
+            else (no)
+                :Skip chunk;
+            endif
+        :Next chunk;
+    else (no)
+        :Skip file;
+    endif
+    :Next object;
+}
+
+partition "Web Scraping Section" {
+    :For each URL in list;
+        :Scrape webpage;
+        :Extract text;
+        :Chunk text;
+        :For each chunk;
+            :Clean chunk;
+            :Validate chunk;
+            if (Valid?) then (yes)
+                :Truncate if > MAX_CHUNK_LENGTH;
+                :Get embedding from Bedrock;
+                if (Embedding success?) then (yes)
+                    :Upsert embedding to Pinecone with metadata;
+                else (no)
+                    :Log embedding error;
+                endif
+            else (no)
+                :Skip chunk;
+            endif
+        :Next chunk;
+    :Next URL;
+}
+
+:Print \"Preprocessing and Pinecone upsert completed.\";
+stop
+@enduml

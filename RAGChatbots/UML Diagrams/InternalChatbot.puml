@@ -1,0 +1,34 @@
+@startuml InternalSearchChatbot
+title Internal Search Chatbot Flow
+
+start
+
+:Initialize DynamoDB for conversation history;
+:Initialize Pinecone client;
+:Initialize Bedrock client;
+
+:Receive Lambda event with prompt and session_id;
+
+if (Prompt provided?) then (yes)
+    :Get embedding for prompt using Bedrock;
+    if (Embedding success?) then (yes)
+        :Query Pinecone for top 3 similar chunks;
+        :Gather retrieved chunks for context;
+        :Get recent conversation history from DynamoDB;
+        :Compose full prompt for Claude (history + KB context + user question);
+        :Send prompt to Claude via Bedrock;
+        if (Claude response success?) then (yes)
+            :Update and save conversation history in DynamoDB;
+            :Return Claude response to user;
+        else (no)
+            :Return error (Claude response failed);
+        endif
+    else (no)
+        :Return error (embedding failed);
+    endif
+else (no)
+    :Return error (no prompt provided);
+endif
+
+stop
+@enduml

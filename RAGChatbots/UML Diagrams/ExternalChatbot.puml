@@ -1,0 +1,32 @@
+@startuml ExternalSearchChatbot
+title External Search Chatbot Flow
+
+start
+
+:Initialize DynamoDB for conversation history;
+:Initialize Bedrock client;
+
+:Receive Lambda event with prompt and session_id;
+
+if (Prompt provided?) then (yes)
+    :Perform Google Search for prompt;
+    if (Google Search success?) then (yes)
+        :Truncate web search context to embedding limit;
+        :Get recent conversation history from DynamoDB;
+        :Compose full prompt for Claude (history + web context + user question);
+        :Send prompt to Claude via Bedrock;
+        if (Claude response success?) then (yes)
+            :Update and save conversation history in DynamoDB;
+            :Return Claude response to user;
+        else (no)
+            :Return error (Claude response failed);
+        endif
+    else (no)
+        :Return error (Google Search failed);
+    endif
+else (no)
+    :Return error (no prompt provided);
+endif
+
+stop
+@enduml
