@@ -1,0 +1,10 @@
+@startuml SelfHealingSeleniumScriptClass
+class SelfHealingSeleniumAgent {
+    + runTest(byType, locator)
+    + getBy(byType, locator)
+    + selfHeal(args)
+}
+
+SelfHealingSeleniumAgent : selfHeal() --> runTest()
+SelfHealingSeleniumAgent : runTest() --> getBy()
+@enduml

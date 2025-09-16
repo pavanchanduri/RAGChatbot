@@ -1,0 +1,10 @@
+@startuml MCPAgentLambdaClass
+class MCPAgentLambda {
+    + build_prompt(event)
+    + extract_new_locator(model_response)
+    + lambda_handler(event, context)
+}
+
+MCPAgentLambda : lambda_handler() --> build_prompt()
+MCPAgentLambda : lambda_handler() --> extract_new_locator()
+@enduml

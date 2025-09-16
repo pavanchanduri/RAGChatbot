@@ -1,0 +1,10 @@
+@startuml MCPDefectAgentLambdaClass
+class MCPDefectAgentLambda {
+    + summarize_failure(test_name, error, stack_trace)
+    + create_jira_issue(summary, description, severity)
+    + lambda_handler(event, context)
+}
+
+MCPDefectAgentLambda : lambda_handler() --> summarize_failure()
+MCPDefectAgentLambda : lambda_handler() --> create_jira_issue()
+@enduml

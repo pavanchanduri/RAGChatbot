@@ -1,0 +1,50 @@
+@startuml SeleniumDefectAgentTest
+title Selenium Defect Agent Test Flow
+
+start
+
+:testSeleniumDefectAgent(testData);
+:Setup Chrome WebDriver;
+:driver.get(\"https://www.example.com\");
+
+:Try to find h1 element;
+if (h1 found?) then (yes)
+    :Pass test: h1 element found and displayed;
+else (no)
+    :sendDefect(\"selenium_test_h1_missing\", \"h1 element not found\", exception);
+endif
+
+:Try to find element with id \"nonexistent-element\";
+if (element found?) then (yes)
+    :Pass test;
+else (no)
+    :sendDefect(\"selenium_test_nonexistent_element\", \"Element with id 'nonexistent-element' not found\", exception);
+endif
+
+:Try to use invalid XPath selector;
+if (selector valid?) then (yes)
+    :Pass test;
+else (no)
+    :sendDefect(\"selenium_test_invalid_selector\", \"Invalid XPath selector used\", exception);
+endif
+
+:Try to wait for element with id \"slow-element\" (simulate timeout);
+if (element visible in time?) then (yes)
+    :Pass test;
+else (no)
+    :sendDefect(\"selenium_test_timeout\", \"Timeout waiting for element\", exception);
+endif
+
+if (Unexpected error?) then (yes)
+    :sendDefect(\"selenium_test_unexpected_error\", error, exception);
+endif
+
+:driver.quit();
+
+stop
+
+partition Functions {
+    :sendDefect(testName, error, stackTrace);
+}
+
+@enduml

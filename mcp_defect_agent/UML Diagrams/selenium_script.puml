@@ -1,0 +1,8 @@
+@startuml SeleniumDefectAgentTestClass
+class SeleniumDefectAgentTest {
+    + sendDefect(testName, error, stackTrace)
+    + testSeleniumDefectAgent(testData)
+}
+
+SeleniumDefectAgentTest : testSeleniumDefectAgent() --> sendDefect()
+@enduml

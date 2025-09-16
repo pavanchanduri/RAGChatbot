@@ -1,0 +1,32 @@
+@startuml MCPDefectAgentLambda
+title MCP Defect Agent Lambda Flow
+
+start
+
+:Receive Lambda event (defect report via API Gateway);
+:Extract and parse body (test_name, error, stack_trace);
+
+:Check for duplicate defect in DynamoDB;
+if (Duplicate found?) then (yes)
+    :Return message: Duplicate defect. Not logged again.;
+    stop
+endif
+
+:Summarize defect using Bedrock LLM (summarize_failure);
+:Extract summary, description, severity;
+
+:Log defect in DynamoDB (put_item);
+
+:Create JIRA issue via REST API (create_jira_issue);
+:Receive JIRA result;
+
+:Return message: Defect logged, with defect and JIRA details;
+
+stop
+
+partition Functions {
+    :summarize_failure(test_name, error, stack_trace);
+    :create_jira_issue(summary, description, severity);
+}
+
+@enduml

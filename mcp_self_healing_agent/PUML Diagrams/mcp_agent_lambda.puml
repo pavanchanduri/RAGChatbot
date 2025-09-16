@@ -1,0 +1,33 @@
+@startuml MCPSelfHealingAgent
+title MCP Self-Healing Agent Lambda Flow
+
+start
+
+:Receive Lambda event (API Gateway or direct);
+if ("body" in event and is string) then (yes)
+    :Parse event body as JSON;
+endif
+
+:Build prompt using build_prompt(event);
+
+:Connect to Bedrock Claude model;
+
+:Send prompt to Claude via Bedrock;
+:Receive model suggestion;
+
+:Extract new locator from suggestion using extract_new_locator();
+
+if (Success?) then (yes)
+    :Return suggestion and new_locator in response;
+else (no)
+    :Return error and stack trace in response;
+endif
+
+stop
+
+partition Functions {
+    :build_prompt(event);
+    :extract_new_locator(model_response);
+}
+
+@enduml
