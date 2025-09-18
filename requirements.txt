@@ -8,3 +8,6 @@ pinecone
 flask
 selenium
 chromedriver-autoinstaller
+langchain
+langchain-community
+pinecone-client

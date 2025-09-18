@@ -1,0 +1,31 @@
+@startuml
+title RAG Internal Search Chatbot (LangChain + OpenSearch)
+
+actor "User/API Gateway" as User
+entity "Lambda Function" as Lambda
+entity "Bedrock Embeddings" as BedrockEmbed
+entity "OpenSearchVectorSearch (LangChain)" as VectorSearch
+database "OpenSearch" as OS
+database "DynamoDB" as Dynamo
+entity "Claude LLM (Bedrock)" as Claude
+
+User --> Lambda : Send prompt, session_id
+Lambda --> BedrockEmbed : Generate embedding for prompt
+Lambda --> VectorSearch : Query top-k similar chunks
+VectorSearch --> OS : Vector similarity search
+Lambda --> Dynamo : Get recent conversation history
+Lambda --> Claude : Send prompt + context + history
+Claude --> Lambda : Return response
+Lambda --> Dynamo : Save updated history
+Lambda --> User : Return response
+
+note right of Lambda
+- Receives prompt/session_id
+- Embeds prompt
+- Retrieves context chunks
+- Loads/saves history
+- Builds prompt for Claude
+- Returns answer
+end note
+
+@enduml

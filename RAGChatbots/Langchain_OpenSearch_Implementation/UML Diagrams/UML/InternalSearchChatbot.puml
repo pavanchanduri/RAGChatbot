@@ -1,0 +1,16 @@
+@startuml InternalSearchChatbotClass
+class InternalSearchChatbotLambda {
+    - dynamodb: boto3.resource
+    - history_table: Table
+    - OPENSEARCH_CLIENT: OpenSearch
+    - BEDROCK_EMBEDDINGS: BedrockEmbeddings
+    + get_history(session_id)
+    + save_history(session_id, history)
+    + get_embedding(prompt, bedrock)
+    + lambda_handler(event, context)
+}
+
+InternalSearchChatbotLambda : lambda_handler() --> get_embedding()
+InternalSearchChatbotLambda : lambda_handler() --> get_history()
+InternalSearchChatbotLambda : lambda_handler() --> save_history()
+@enduml

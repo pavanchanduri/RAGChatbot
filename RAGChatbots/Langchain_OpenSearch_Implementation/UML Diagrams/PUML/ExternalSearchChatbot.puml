@@ -1,0 +1,30 @@
+@startuml ExternalSearchChatbotLangchainClass
+title External Search Chatbot (Google Search API + LangChain)
+
+actor "User/API Gateway" as User
+entity "Lambda Function" as Lambda
+entity "Google Search API" as GoogleAPI
+entity "LangChain Document" as LC_Doc
+database "DynamoDB" as Dynamo
+entity "Claude LLM (Bedrock)" as Claude
+
+User --> Lambda : Send prompt, session_id
+Lambda --> GoogleAPI : Fetch top 3 snippets
+GoogleAPI --> Lambda : Return snippets
+Lambda --> LC_Doc : Wrap snippets as Documents
+Lambda --> Dynamo : Get recent conversation history
+Lambda --> Claude : Send prompt + context + history
+Claude --> Lambda : Return response
+Lambda --> Dynamo : Save updated history
+Lambda --> User : Return response
+
+note right of Lambda
+- Receives prompt/session_id
+- Fetches web context
+- Wraps context as Documents
+- Loads/saves history
+- Builds prompt for Claude
+- Returns answer
+end note
+
+@enduml

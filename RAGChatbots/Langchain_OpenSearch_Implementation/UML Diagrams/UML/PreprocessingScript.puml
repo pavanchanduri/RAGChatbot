@@ -1,0 +1,21 @@
+@startuml RAGPreprocessingScriptLangchainClass
+class RAGPreprocessingScriptLangchain {
+    - s3: boto3.client
+    - opensearch_client: OpenSearch
+    - bedrock_embeddings: BedrockEmbeddings
+    - text_splitter: RecursiveCharacterTextSplitter
+    + load_and_split_text(text, source)
+    + process_s3_files()
+    + scrape_webpage(url)
+    + process_webpages()
+    + is_s3_trigger(event)
+    + main(event)
+    + lambda_handler(event, context)
+}
+
+RAGPreprocessingScriptLangchain : main() --> process_s3_files()
+RAGPreprocessingScriptLangchain : main() --> process_webpages()
+RAGPreprocessingScriptLangchain : process_s3_files() --> load_and_split_text()
+RAGPreprocessingScriptLangchain : process_webpages() --> scrape_webpage()
+RAGPreprocessingScriptLangchain : process_webpages() --> load_and_split_text()
+@enduml
