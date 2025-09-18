@@ -1,3 +1,69 @@
+"""
+External Search Chatbot (Google Search API)
+===========================================
+
+Overview:
+---------
+This AWS Lambda function implements a chatbot that answers user queries using live web search results from the Google Custom Search API. It retrieves relevant snippets, builds context, and uses Claude LLM (via Bedrock) to generate responses. Conversation history is stored in DynamoDB.
+
+Flow Summary:
+-------------
+1. **User Query Input**: Receives a prompt and session_id via an event (API Gateway/Lambda invocation).
+2. **Web Search Context Retrieval**: Uses Google Search API to fetch top 3 relevant snippets for the prompt.
+3. **Context Assembly**: Extracts the text content of the retrieved snippets and joins them for context.
+4. **Conversation History**: Loads recent conversation history from DynamoDB and formats it for the LLM.
+5. **Prompt Construction**: Builds a prompt for the Claude LLM, including conversation history and web search context.
+6. **LLM Response Generation**: Invokes Claude via Bedrock to generate a response.
+7. **History Update**: Saves the new turn (user + bot response) back to DynamoDB.
+8. **Response Return**: Returns the bot's answer to the user.
+
+Key Components:
+---------------
+- **Google Search API**: Fetches live web search results for user queries.
+- **DynamoDB**: Stores per-session conversation history.
+- **Claude LLM (Bedrock)**: Generates final answers using context and history.
+
+Detailed Step-by-Step Flow:
+--------------------------
+1. **Lambda Handler Entry**
+    - Receives `prompt` and `session_id` from the event.
+    - Initializes Bedrock client for LLM calls.
+
+2. **Web Search Context Retrieval**
+    - Calls `google_search(prompt)`.
+    - Fetches top 3 snippets using Google Custom Search API.
+
+3. **Context Preparation**
+    - Joins snippets with `\n` and truncates to embedding input limit.
+
+4. **Conversation History**
+    - Loads last 10 turns from DynamoDB using `get_history(session_id)`.
+    - Formats as "User: ...\nBot: ..." for each turn.
+
+5. **Prompt Construction for LLM**
+    - Builds a prompt including conversation history, web search context, and the user's question.
+
+6. **Claude LLM Invocation**
+    - Sends the constructed prompt to Claude via Bedrock.
+    - Receives the bot's response.
+
+7. **History Update**
+    - Appends the new turn to history and saves it back to DynamoDB.
+
+8. **Response Return**
+    - Returns the bot's answer in the Lambda response.
+
+Environment Variables Required:
+------------------------------
+- `GOOGLE_API_KEY`: Google Custom Search API key
+- `GOOGLE_CSE_ID`: Google Custom Search Engine ID
+
+Dependencies:
+-------------
+- boto3
+- requests
+
+"""
 import boto3
 import json
 import os

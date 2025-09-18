@@ -1,3 +1,91 @@
+"""
+RAG Preprocessing Script (Pinecone)
+===================================
+
+Overview:
+---------
+This script preprocesses knowledge base sources (S3 text files and web pages), chunks and cleans their content, 
+generates embeddings, and stores the resulting vectors in a Pinecone index for retrieval-augmented generation (RAG) chatbots. 
+It is designed to run as an AWS Lambda function, triggered by S3 events or scheduled via EventBridge.
+
+Flow Summary:
+-------------
+1. **Trigger**: Invoked by S3 event (file upload) or scheduled EventBridge rule.
+2. **Source Selection**:
+    - S3 trigger: Processes all text files in the S3 bucket.
+    - Scheduled trigger: Scrapes and processes specified web pages.
+3. **Text Loading & Chunking**:
+    - Loads text from S3 or scraped web page.
+    - Splits text into fixed-size chunks.
+    - Cleans each chunk for printable characters and whitespace.
+    - Validates chunk encoding.
+4. **Embedding Generation**:
+    - Uses AWS Bedrock (Cohere embed-english-v3) to generate a vector for each chunk.
+    - Retries on throttling or errors.
+5. **Vector Upsert to Pinecone**:
+    - Chunks and their embeddings are upserted into Pinecone with metadata (chunk text, source).
+    - If the index does not exist, it is created with the required dimension and metric.
+6. **Completion**:
+    - Logs the number of chunks indexed per source.
+    - Ready for retrieval by downstream RAG chatbot.
+
+Key Components:
+---------------
+- **S3 Client**: Loads text files from S3 bucket.
+- **BeautifulSoup**: Scrapes and cleans web page content.
+- **Chunking & Cleaning**: Splits and sanitizes text for embedding.
+- **Bedrock Embeddings**: Generates embedding vectors for each chunk.
+- **Pinecone**: Vector database for fast similarity search and upsert.
+
+Detailed Step-by-Step Flow:
+--------------------------
+1. **Script/Lambda Entry**
+    - Entry point is `main(event)` or `lambda_handler(event, context)`.
+
+2. **Trigger Detection**
+    - If the event is an S3 trigger, process S3 files.
+    - Otherwise, process web pages (scheduled run).
+
+3. **S3 File Processing**
+    - List all objects in the S3 bucket.
+    - For each `.txt` file:
+      - Download and decode text.
+      - Split into chunks, clean, and validate.
+      - Embed and upsert each chunk into Pinecone.
+
+4. **Web Page Processing**
+    - For each URL in the list:
+      - Scrape page content (BeautifulSoup, requests).
+      - Split into chunks, clean, and validate.
+      - Embed and upsert each chunk into Pinecone.
+
+5. **Pinecone Index Management**
+    - Checks if the index exists; creates it if not.
+    - Index mapping includes vector, chunk text, and source metadata fields.
+
+6. **Embedding and Upsert**
+    - For each chunk, generates embedding using Bedrock/Cohere.
+    - Upserts chunk and vector into Pinecone with metadata.
+
+7. **Logging and Completion**
+    - Prints/logs the number of chunks indexed per source.
+    - Indicates completion of preprocessing and upsert.
+
+Environment Variables Required:
+------------------------------
+- `PINECONE_API_KEY`: Pinecone API key
+- `PINECONE_ENVIRONMENT`: Pinecone region
+
+Dependencies:
+-------------
+- boto3
+- requests
+- beautifulsoup4
+- urllib3
+- pinecone-client
+- botocore
+
+"""
 # This script preprocesses text files from S3, chunks, cleans, embeds, and stores them in Pinecone (vector DB).
 #
 # AWS EventBridge can be used to schedule this Lambda/script to run at regular intervals (e.g., hourly, daily).

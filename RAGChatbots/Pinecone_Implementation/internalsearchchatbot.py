@@ -1,3 +1,75 @@
+"""
+Internal Search Chatbot (Pinecone)
+==================================
+
+Overview:
+---------
+This AWS Lambda function implements a Retrieval-Augmented Generation (RAG) chatbot that answers user queries using a knowledge base indexed in Pinecone. It generates embeddings for user queries, retrieves relevant context chunks from Pinecone, and uses Claude LLM (via Bedrock) to generate responses. Conversation history is stored in DynamoDB.
+
+Flow Summary:
+-------------
+1. **User Query Input**: Receives a prompt and session_id via an event (API Gateway/Lambda invocation).
+2. **Embedding Generation**: Uses AWS Bedrock (Cohere embed-english-v3) to convert the prompt into a vector embedding.
+3. **Vector Search (Pinecone)**: Searches Pinecone for the top-k most similar knowledge base chunks using the query embedding.
+4. **Context Assembly**: Extracts the text content of the retrieved chunks and joins them for context.
+5. **Conversation History**: Loads recent conversation history from DynamoDB and formats it for the LLM.
+6. **Prompt Construction**: Builds a prompt for the Claude LLM, including conversation history and retrieved context.
+7. **LLM Response Generation**: Invokes Claude via Bedrock to generate a response.
+8. **History Update**: Saves the new turn (user + bot response) back to DynamoDB.
+9. **Response Return**: Returns the bot's answer to the user.
+
+Key Components:
+---------------
+- **Pinecone**: Vector database for fast similarity search and retrieval.
+- **Bedrock Embeddings**: Generates embedding vectors for user queries.
+- **DynamoDB**: Stores per-session conversation history.
+- **Claude LLM (Bedrock)**: Generates final answers using context and history.
+
+Detailed Step-by-Step Flow:
+--------------------------
+1. **Lambda Handler Entry**
+    - Receives `prompt` and `session_id` from the event.
+    - Initializes Bedrock client for embedding and LLM calls.
+
+2. **Prompt Embedding**
+    - Calls `get_embedding(prompt, bedrock)`.
+    - Embedding is a list of 1024 floats representing the semantic meaning of the prompt.
+
+3. **Vector Search in Pinecone**
+    - Queries Pinecone for top 3 relevant chunks using the query embedding.
+    - Each chunk is retrieved with its metadata (text, source).
+
+4. **Context Preparation**
+    - Extracts `chunk` from each match's metadata.
+    - Joins them with `\n---\n` to form `kb_context`.
+
+5. **Conversation History**
+    - Loads last 10 turns from DynamoDB using `get_history(session_id)`.
+    - Formats as "User: ...\nBot: ..." for each turn.
+
+6. **Prompt Construction for LLM**
+    - Builds a prompt including conversation history, knowledge base context, and the user's question.
+
+7. **Claude LLM Invocation**
+    - Sends the constructed prompt to Claude via Bedrock.
+    - Receives the bot's response.
+
+8. **History Update**
+    - Appends the new turn to history and saves it back to DynamoDB.
+
+9. **Response Return**
+    - Returns the bot's answer in the Lambda response.
+
+Environment Variables Required:
+------------------------------
+- `PINECONE_API_KEY`: Pinecone API key
+
+Dependencies:
+-------------
+- boto3
+- pinecone-client
+
+"""
 import boto3
 import json
 import os
