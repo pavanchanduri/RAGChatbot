@@ -4,7 +4,9 @@ External Search Chatbot (Google Search API + LangChain)
 
 Overview:
 ---------
-This AWS Lambda function implements a chatbot that answers user queries using live web search results from the Google Custom Search API. It leverages LangChain's Document abstraction for context handling and stores conversation history in DynamoDB.
+This AWS Lambda function implements a chatbot that answers user queries using live web search results 
+from the Google Custom Search API. It leverages LangChain's Document abstraction for context handling 
+and stores conversation history in DynamoDB.
 
 Flow Summary:
 -------------

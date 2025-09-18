@@ -4,7 +4,9 @@ RAG Preprocessing Script (LangChain + OpenSearch)
 
 Overview:
 ---------
-This script preprocesses knowledge base sources (S3 text files and web pages), chunks and embeds their content, and stores the resulting vectors in an OpenSearch index for retrieval-augmented generation (RAG) chatbots. It is designed to run as an AWS Lambda function, triggered by S3 events or scheduled via EventBridge.
+This script preprocesses knowledge base sources (S3 text files and web pages), chunks and embeds their content, 
+and stores the resulting vectors in an OpenSearch index for retrieval-augmented generation (RAG) chatbots. 
+It is designed to run as an AWS Lambda function, triggered by S3 events or scheduled via EventBridge.
 
 Flow Summary:
 -------------

@@ -4,13 +4,16 @@ RAG Internal Search Chatbot (LangChain + OpenSearch)
 
 Overview:
 ---------
-This AWS Lambda function implements a Retrieval-Augmented Generation (RAG) chatbot that answers user queries using a knowledge base indexed in OpenSearch. It leverages LangChain for embedding generation and vector search abstraction, and stores conversation history in DynamoDB.
+This AWS Lambda function implements a Retrieval-Augmented Generation (RAG) chatbot 
+that answers user queries using a knowledge base indexed in OpenSearch. It leverages LangChain 
+for embedding generation and vector search abstraction, and stores conversation history in DynamoDB.
 
 Flow Summary:
 -------------
 1. **User Query Input**: Receives a prompt and session_id via an event (API Gateway/Lambda invocation).
 2. **Embedding Generation**: Uses AWS Bedrock (Cohere embed-english-v3) to convert the prompt into a vector embedding.
-3. **Vector Search (LangChain + OpenSearch)**: Searches OpenSearch for the top-k most similar knowledge base chunks using LangChain's OpenSearchVectorSearch abstraction.
+3. **Vector Search (LangChain + OpenSearch)**: Searches OpenSearch for the top-k most similar knowledge base chunks 
+   using LangChain's OpenSearchVectorSearch abstraction.
 4. **Context Assembly**: Extracts the text content of the retrieved chunks and joins them for context.
 5. **Conversation History**: Loads recent conversation history from DynamoDB and formats it for the LLM.
 6. **Prompt Construction**: Builds a prompt for the Claude LLM, including conversation history and retrieved context.

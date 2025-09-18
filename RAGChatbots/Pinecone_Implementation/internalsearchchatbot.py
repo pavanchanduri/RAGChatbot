@@ -4,7 +4,10 @@ Internal Search Chatbot (Pinecone)
 
 Overview:
 ---------
-This AWS Lambda function implements a Retrieval-Augmented Generation (RAG) chatbot that answers user queries using a knowledge base indexed in Pinecone. It generates embeddings for user queries, retrieves relevant context chunks from Pinecone, and uses Claude LLM (via Bedrock) to generate responses. Conversation history is stored in DynamoDB.
+This AWS Lambda function implements a Retrieval-Augmented Generation (RAG) chatbot that answers 
+user queries using a knowledge base indexed in Pinecone. It generates embeddings for user queries, 
+retrieves relevant context chunks from Pinecone, and uses Claude LLM (via Bedrock) to generate responses. 
+Conversation history is stored in DynamoDB.
 
 Flow Summary:
 -------------

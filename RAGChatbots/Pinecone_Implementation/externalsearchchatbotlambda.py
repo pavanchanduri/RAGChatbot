@@ -4,7 +4,9 @@ External Search Chatbot (Google Search API)
 
 Overview:
 ---------
-This AWS Lambda function implements a chatbot that answers user queries using live web search results from the Google Custom Search API. It retrieves relevant snippets, builds context, and uses Claude LLM (via Bedrock) to generate responses. Conversation history is stored in DynamoDB.
+This AWS Lambda function implements a chatbot that answers user queries using live web search results from 
+the Google Custom Search API. It retrieves relevant snippets, builds context, and uses Claude LLM (via Bedrock) 
+to generate responses. Conversation history is stored in DynamoDB.
 
 Flow Summary:
 -------------
