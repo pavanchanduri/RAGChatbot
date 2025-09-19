@@ -1,42 +1,33 @@
-@startuml LLMTestCaseGenerator
-title LLM Test Case Generator Lambda Flow
+@startuml llmtestcasegenerator
+title RAG LLM Test Case Generator Lambda (LangChain + OpenSearch)
 
-start
+actor "User/API Gateway" as User
+entity "TestCaseGenerator Lambda" as Lambda
+entity "Bedrock Embeddings" as BedrockEmbed
+entity "OpenSearchVectorSearch (LangChain)" as VectorSearch
+database "OpenSearch" as OS
+database "DynamoDB" as Dynamo
+entity "Claude LLM (Bedrock)" as Claude
 
-:Receive Lambda event with body, filename, sessionId;
-:Parse and decode input (base64 if needed);
+User --> Lambda : Send document, filename, session_id
+Lambda --> BedrockEmbed : Generate embedding for extracted text
+Lambda --> VectorSearch : Query top-k similar KB chunks
+VectorSearch --> OS : Vector similarity search
+Lambda --> Dynamo : Get recent conversation history
+Lambda --> Claude : Send prompt + KB context + history
+Claude --> Lambda : Return test cases
+Lambda --> Claude : Send test cases for validation
+Claude --> Lambda : Return validation feedback
+Lambda --> Dynamo : Save updated history
+Lambda --> User : Return test cases + validation feedback
 
-if (Document provided?) then (yes)
-    :Extract text from document;
-    if (filename ends with .txt) then (yes)
-        :Use raw text;
-    else if (filename ends with .docx) then (yes)
-        :Call extract_text_from_docx();
-    else if (filename ends with .pdf) then (yes)
-        :Call extract_text_from_pdf();
-    else (no)
-        :Use raw text;
-    endif
-else (no)
-    :Return error (no document provided);
-    stop
-endif
+note right of Lambda
+- Receives document/filename/session_id
+- Extracts text from document
+- Embeds text and retrieves KB context
+- Loads/saves history
+- Builds prompt for Claude
+- Returns test cases and validation
+end note
 
-:Get recent conversation history from DynamoDB;
-:Compose prompt for Claude (history + requirements/specifications);
-
-:Invoke Bedrock Claude model;
-if (Claude response success?) then (yes)
-    :Update and save conversation history in DynamoDB;
-    :Invoke Bedrock Claude model for validation of test cases;
-    if (Validation response success?) then (yes)
-        :Return generated test cases and validation feedback to user;
-    else (no)
-        :Return generated test cases with validation error;
-    endif
-else (no)
-    :Return error (Claude response failed);
-endif
-
-stop
 @enduml

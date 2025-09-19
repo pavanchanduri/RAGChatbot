@@ -1,8 +1,12 @@
-@startuml LLMTestCaseGenerator
-title LLM Test Case Generator Lambda Flow
+
+@startuml LLMTestCaseGeneratorClass
+title RAG LLM Test Case Generator Lambda - End to End Class Diagram
+
 class LLMTestCaseGeneratorLambda {
     - dynamodb: boto3.resource
     - history_table: Table
+    - OPENSEARCH_CLIENT: OpenSearch
+    - BEDROCK_EMBEDDINGS: BedrockEmbeddings
     + get_history(session_id)
     + save_history(session_id, history)
     + extract_text_from_docx(docx_bytes)
@@ -11,9 +15,21 @@ class LLMTestCaseGeneratorLambda {
     + validate_testcases(testcases)
 }
 
+class KBRetriever {
+    + retrieve_kb_context(query, top_k)
+}
+
+class BedrockClaude {
+    + generate_testcases(prompt)
+    + validate_testcases(testcases)
+}
+
 LLMTestCaseGeneratorLambda : lambda_handler() --> get_history()
 LLMTestCaseGeneratorLambda : lambda_handler() --> save_history()
 LLMTestCaseGeneratorLambda : lambda_handler() --> extract_text_from_docx()
 LLMTestCaseGeneratorLambda : lambda_handler() --> extract_text_from_pdf()
-LLMTestCaseGeneratorLambda : lambda_handler() --> validate_testcases()
+LLMTestCaseGeneratorLambda : lambda_handler() --> KBRetriever::retrieve_kb_context()
+LLMTestCaseGeneratorLambda : lambda_handler() --> BedrockClaude::generate_testcases()
+LLMTestCaseGeneratorLambda : lambda_handler() --> BedrockClaude::validate_testcases()
+
 @enduml

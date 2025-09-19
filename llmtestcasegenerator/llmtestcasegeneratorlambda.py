@@ -1,7 +1,68 @@
+
+
+"""
+LLM Test Case Generator Lambda (with RAG)
+=========================================
+
+Overview:
+---------
+This AWS Lambda function generates high-level functional and non-functional test cases from user-provided requirements/specifications.
+It uses Retrieval-Augmented Generation (RAG) by incorporating relevant context from a knowledge base (KB) of similar projects, indexed in OpenSearch.
+The generated test cases are validated by a second LLM call for correctness and completeness.
+
+Flow Summary:
+-------------
+1. **Input Parsing**:
+    - Receives an HTTP event with a document (specification) and filename (supports .txt, .docx, .pdf).
+    - Decodes and extracts text from the document.
+2. **KB Context Retrieval (RAG)**:
+    - Uses the extracted specification as a query to retrieve top-k relevant KB chunks from OpenSearch via `kb_retriever.py`.
+    - KB context is concatenated and included in the LLM prompt.
+3. **Conversation History**:
+    - Loads the last 10 exchanges from DynamoDB for session continuity.
+4. **Prompt Construction**:
+    - Builds a prompt for the LLM (Claude via Bedrock) including history, specification, and KB context.
+5. **Test Case Generation**:
+    - Invokes the LLM to generate test cases based on the prompt.
+6. **Validation**:
+    - Invokes the LLM again to review and validate the generated test cases.
+7. **History Update**:
+    - Saves the latest user/bot exchange to DynamoDB.
+8. **Response**:
+    - Returns the generated test cases, validation feedback, and session ID.
+
+Supported Document Formats:
+--------------------------
+- .txt (plain text)
+- .docx (Word, using python-docx)
+- .pdf (PDF, using PyPDF2)
+
+RAG Integration:
+---------------
+- KB context is retrieved from OpenSearch using semantic vector search (via LangChain and Bedrock embeddings).
+- The KB is built by a separate preprocessing script that indexes project documents and webpages.
+
+Dependencies:
+-------------
+- boto3
+- python-docx
+- PyPDF2
+- kb_retriever (utility for OpenSearch KB retrieval)
+
+Usage:
+------
+1. Deploy as an AWS Lambda function with required dependencies (use a Lambda layer if needed).
+2. Ensure OpenSearch KB is indexed and accessible.
+3. Configure DynamoDB for conversation history.
+4. Send requests with document and filename; receive test cases and validation feedback.
+
+"""
 import boto3
 import json
 import base64
 from uuid import uuid4
+import os
+from kb_retriever import retrieve_kb_context
 
 try:
     import docx
@@ -85,6 +146,7 @@ def lambda_handler(event, context):
             "body": json.dumps({"error": "No document provided"})
         }
 
+
     # Try to extract text based on file extension
     extracted_text = ""
     try:
@@ -108,6 +170,15 @@ def lambda_handler(event, context):
         print("EXTRACTION ERROR:", str(e))
         extracted_text = f"[Could not extract text from {filename}: {str(e)}]"
 
+    # Retrieve KB context from OpenSearch using the extracted text as query
+    try:
+        print("Retrieving KB context from OpenSearch...")
+        kb_context = retrieve_kb_context(extracted_text, top_k=5)
+        print("KB context (first 200 chars):", kb_context[:200])
+    except Exception as e:
+        print("KB RETRIEVAL ERROR:", str(e))
+        kb_context = "[Could not retrieve KB context: {}]".format(str(e))
+
     # Conversation history (optional, last 10 exchanges)
     MAX_HISTORY = 10
     try:
@@ -123,11 +194,13 @@ def lambda_handler(event, context):
     for turn in recent_history:
         history_text += f"User: {turn['user']}\nBot: {turn['bot']}\n"
 
-    # Compose prompt for Claude
+
+    # Compose prompt for Claude with KB context
     prompt = (
         f"{history_text}"
-        f"You are an expert QA engineer. Given the following requirements/specifications, generate high level functional and non-functional test cases and include some typical edge cases also:\n\n"
-        f"{extracted_text}"
+        f"You are an expert QA engineer. Given the following requirements/specifications and relevant context from similar projects, generate high level functional and non-functional test cases and include some typical edge cases also:\n\n"
+        f"Project/Spec:\n{extracted_text}\n\n"
+        f"Relevant KB Context:\n{kb_context}"
     )
 
     native_request = {
