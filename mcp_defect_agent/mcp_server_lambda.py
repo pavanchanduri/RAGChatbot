@@ -1,34 +1,48 @@
+
 """
-MCP Defect Agent Lambda Server
------------------------------
-This file implements the AWS Lambda-based server for the MCP Defect Agent.
+MCP Defect Agent Lambda Server (LangChain Version)
+-------------------------------------------------
 
-Purpose:
-- Receives defect reports (typically from test automation or CI pipelines) via API Gateway.
-- Checks for duplicate defects in DynamoDB to avoid redundant logging.
-- Uses AWS Bedrock LLM to summarize the defect and determine severity.
-- Logs each unique defect to a DynamoDB table for tracking and analytics.
-- Automatically creates a JIRA issue for each new defect using the Atlassian REST API and Atlassian Document Format.
+Overview:
+---------
+This AWS Lambda function ingests defect reports from test automation or CI pipelines via API Gateway, deduplicates them, summarizes using a Bedrock LLM (via LangChain), logs unique defects to DynamoDB, and creates JIRA issues for tracking.
 
-How it works:
-- The Lambda handler expects a JSON payload with test failure details (test name, error, stack trace, etc.).
-- If the defect is unique, it is summarized, stored in DynamoDB, and logged in JIRA.
-- The Lambda returns a JSON response with defect and JIRA issue details.
+End-to-End Flow:
+----------------
+1. **API Gateway Ingestion**: Receives a JSON payload with test failure details (test_name, error, stack_trace).
+2. **Deduplication**: Checks DynamoDB for existing defects with the same test_name and error. If found, returns a duplicate message.
+3. **LLM Summarization (LangChain)**: Uses LangChain's Bedrock integration to summarize the defect, producing a title, description, and severity.
+4. **DynamoDB Logging**: Stores the unique defect with all details in DynamoDB for analytics and tracking.
+5. **JIRA Integration**: Creates a JIRA issue using the Atlassian REST API and Atlassian Document Format for the description.
+6. **Response**: Returns a JSON response with defect and JIRA issue details.
 
-When to use:
-- Deploy this Lambda behind an API Gateway to enable automated, serverless defect logging and JIRA integration for your test automation ecosystem.
-- Integrate with test runners or CI/CD pipelines for end-to-end defect management.
+Configuration:
+--------------
+- DynamoDB table name, JIRA credentials, and project key are set via environment variables.
+- Bedrock model and region are configurable in the code.
 
-Note:
-- All configuration (DynamoDB table, JIRA credentials, etc.) is managed via environment variables for security and flexibility.
-- For local/server-based (non-Lambda) deployments, see the Flask-based implementation if provided.
+Dependencies:
+-------------
+- boto3
+- requests
+- langchain-community
+
+Usage:
+------
+1. Deploy as an AWS Lambda function behind API Gateway.
+2. Set required environment variables for DynamoDB and JIRA.
+3. Integrate with test runners or CI/CD pipelines for automated defect management.
+
 """
+
 
 import json
 import os
 import boto3
 import requests
 from datetime import datetime, timezone
+from langchain_community.llms import Bedrock
+from langchain.prompts import PromptTemplate
 
 # DynamoDB table name (no sensitive default)
 DEFECT_TABLE = os.environ.get('DEFECT_TABLE')
@@ -42,42 +56,38 @@ JIRA_API_TOKEN = os.environ.get('JIRA_API_TOKEN')
 JIRA_PROJECT_KEY = os.environ.get('JIRA_PROJECT_KEY')
 print(f"JIRA_URL: {JIRA_URL}, JIRA_USER: {JIRA_USER}, JIRA_PROJECT_KEY: {JIRA_PROJECT_KEY}")
 
-"""
-Summarize failure using AWS Bedrock LLM
-The method constructs a prompt with test failure details and invokes the Bedrock model to generate a defect summary.
-"""
+
 def summarize_failure(test_name, error, stack_trace=None):
+    """
+    Summarize failure using Bedrock LLM via LangChain.
+    Constructs a prompt with test failure details and invokes the Bedrock model to generate a defect summary.
+    Returns a dict with title, description, and severity.
+    """
     print(f"Summarizing failure for test: {test_name}, error: {error}")
-    bedrock = boto3.client("bedrock-runtime", region_name="us-west-2")
-    prompt = (
-        f"A test named '{test_name}' failed.\n"
-        f"Error: {error}\n"
-        f"Stack trace: {stack_trace or ''}\n"
-        f"Please generate a defect summary with a title, description, and severity (High/Medium/Low). "
-        f"Respond in JSON with keys: title, description, severity."
+    llm = Bedrock(
+        model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
+        region_name="us-west-2"
     )
-    native_request = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 256,
-        "temperature": 0.3,
-        "messages": [
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": prompt}],
-            }
-        ],
-    }
-    request = json.dumps(native_request)
-    try:
-        response = bedrock.invoke_model(
-            modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
-            body=request
+    prompt_template = PromptTemplate(
+        input_variables=["test_name", "error", "stack_trace"],
+        template=(
+            "A test named '{test_name}' failed.\n"
+            "Error: {error}\n"
+            "Stack trace: {stack_trace}\n"
+            "Please generate a defect summary with a title, description, and severity (High/Medium/Low). "
+            "Respond in JSON with keys: title, description, severity."
         )
-        model_response = json.loads(response["body"].read())
+    )
+    prompt = prompt_template.format(
+        test_name=test_name,
+        error=error,
+        stack_trace=stack_trace or ""
+    )
+    try:
+        text = llm(prompt)
+        print(f"LLM raw response: {text}")
         import re
         import ast
-        text = model_response["content"][0]["text"]
-        print(f"LLM raw response: {text}")
         match = re.search(r'\{.*\}', text, re.DOTALL)
         if match:
             summary = json.loads(match.group(0))

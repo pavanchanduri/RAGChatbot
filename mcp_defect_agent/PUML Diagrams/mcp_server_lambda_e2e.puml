@@ -1,0 +1,26 @@
+@startuml MCPDefectAgentLambdaE2E
+title MCP Defect Agent Lambda - Failure Ingestion Flow
+
+actor "User/API Gateway" as User
+entity "MCP Server Lambda" as Lambda
+database "DynamoDB" as Dynamo
+entity "JIRA API" as JIRA
+
+User --> Lambda : Send failure report (test_name, error, stack_trace)
+Lambda --> Dynamo : Check for duplicate defect
+Lambda --> Lambda : Summarize defect (Bedrock LLM)
+Lambda --> Dynamo : Log defect
+Lambda --> JIRA : Create JIRA issue
+JIRA --> Lambda : Return JIRA result
+Lambda --> User : Return defect/JIRA details
+
+note right of Lambda
+- Receives failure report
+- Checks for duplicate
+- Summarizes defect
+- Logs defect in DynamoDB
+- Creates JIRA issue
+- Returns result to user
+end note
+
+@enduml
