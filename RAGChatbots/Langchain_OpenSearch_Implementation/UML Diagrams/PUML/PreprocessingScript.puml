@@ -1,4 +1,4 @@
-@startuml
+@startuml PreprocessingScript
 title RAG Preprocessing Script (LangChain + OpenSearch)
 
 actor "EventBridge/S3" as Trigger

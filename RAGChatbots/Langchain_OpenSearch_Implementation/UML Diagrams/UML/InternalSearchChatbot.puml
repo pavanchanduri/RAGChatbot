@@ -1,4 +1,14 @@
+
 @startuml InternalSearchChatbotClass
+title RAG Internal Search Chatbot - End to End Class Diagram
+
+class PreprocessingScript {
+    + process_s3_files()
+    + process_webpages()
+    + chunk_and_embed(text)
+    + upsert_to_opensearch(chunks)
+}
+
 class InternalSearchChatbotLambda {
     - dynamodb: boto3.resource
     - history_table: Table
@@ -10,7 +20,14 @@ class InternalSearchChatbotLambda {
     + lambda_handler(event, context)
 }
 
+PreprocessingScript : process_s3_files() --> chunk_and_embed()
+PreprocessingScript : process_webpages() --> chunk_and_embed()
+PreprocessingScript : chunk_and_embed() --> upsert_to_opensearch()
+PreprocessingScript : upsert_to_opensearch() --> OPENSEARCH_CLIENT
+
 InternalSearchChatbotLambda : lambda_handler() --> get_embedding()
 InternalSearchChatbotLambda : lambda_handler() --> get_history()
 InternalSearchChatbotLambda : lambda_handler() --> save_history()
+InternalSearchChatbotLambda : lambda_handler() --> OPENSEARCH_CLIENT
+
 @enduml

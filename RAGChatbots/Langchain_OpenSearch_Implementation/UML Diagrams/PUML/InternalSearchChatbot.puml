@@ -1,5 +1,5 @@
-@startuml
-title RAG Internal Search Chatbot (LangChain + OpenSearch)
+@startuml InternalSearchChatbot
+title RAG Internal Search Chatbot (LangChain + OpenSearch) with Preprocessing Flow
 
 actor "User/API Gateway" as User
 entity "Lambda Function" as Lambda
@@ -8,7 +8,16 @@ entity "OpenSearchVectorSearch (LangChain)" as VectorSearch
 database "OpenSearch" as OS
 database "DynamoDB" as Dynamo
 entity "Claude LLM (Bedrock)" as Claude
+entity "PreprocessingScript" as Preprocess
+entity "S3/Webpage" as Source
 
+'--- Preprocessing Flow ---
+Source --> Preprocess : S3 event / scheduled scrape
+Preprocess --> BedrockEmbed : Generate embedding for chunked text
+Preprocess --> VectorSearch : Upsert chunks + embeddings
+VectorSearch --> OS : Index KB chunks
+
+'--- Chatbot Flow ---
 User --> Lambda : Send prompt, session_id
 Lambda --> BedrockEmbed : Generate embedding for prompt
 Lambda --> VectorSearch : Query top-k similar chunks
@@ -18,6 +27,13 @@ Lambda --> Claude : Send prompt + context + history
 Claude --> Lambda : Return response
 Lambda --> Dynamo : Save updated history
 Lambda --> User : Return response
+
+note right of Preprocess
+- Triggered by S3 event or schedule
+- Loads S3 docs/webpages
+- Chunks and embeds text
+- Indexes KB chunks in OpenSearch
+end note
 
 note right of Lambda
 - Receives prompt/session_id
