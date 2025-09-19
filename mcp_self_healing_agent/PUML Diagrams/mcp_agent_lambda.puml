@@ -1,33 +1,29 @@
-@startuml MCPSelfHealingAgent
-title MCP Self-Healing Agent Lambda Flow
+@startuml MCPAgentLambdaE2E
+title MCP Self-Healing Selenium Agent Lambda - End to End Flow
 
-start
 
-:Receive Lambda event (API Gateway or direct);
-if ("body" in event and is string) then (yes)
-    :Parse event body as JSON;
-endif
+actor "Test Automation" as TestRunner
+entity "MCP Agent Lambda" as Lambda
+entity "Semantic Retriever (LangChain+OpenSearch)" as Retriever
+entity "Bedrock LLM (LangChain)" as LLM
+entity "Locator Extractor" as LocatorExtract
 
-:Build prompt using build_prompt(event);
+TestRunner --> Lambda : Send failure report (test_name, error, stack_trace, dom_snapshot)
+Lambda --> Retriever : Retrieve past fixes (semantic search)
+Retriever --> Lambda : Return relevant past fixes
+Lambda --> LLM : Build prompt (with context), request fix suggestion
+LLM --> Lambda : Return fix suggestion (Python code, locator, waits, etc.)
+Lambda --> LocatorExtract : Extract new locator from suggestion
+LocatorExtract --> Lambda : Return new locator
+Lambda --> TestRunner : Return fix suggestion, new locator
 
-:Connect to Bedrock Claude model;
-
-:Send prompt to Claude via Bedrock;
-:Receive model suggestion;
-
-:Extract new locator from suggestion using extract_new_locator();
-
-if (Success?) then (yes)
-    :Return suggestion and new_locator in response;
-else (no)
-    :Return error and stack trace in response;
-endif
-
-stop
-
-partition Functions {
-    :build_prompt(event);
-    :extract_new_locator(model_response);
-}
+note right of Lambda
+- Receives failure report
+- Retrieves past fixes using semantic search
+- Builds prompt for LLM with context
+- Gets suggestion from LLM
+- Extracts locator if present
+- Returns fix suggestion and locator
+end note
 
 @enduml

@@ -1,10 +1,31 @@
-@startuml MCPAgentLambdaClass
+
+@startuml MCPAgentLambdaE2EClass
+title MCP Self-Healing Agent Lambda - End to End Class Diagram
+
+
 class MCPAgentLambda {
-    + build_prompt(event)
-    + extract_new_locator(model_response)
-    + lambda_handler(event, context)
+    +lambda_handler(event, context)
+    +build_prompt(event, past_fixes)
+    +extract_new_locator(model_response)
+    +format_response(suggestion, locator)
 }
 
-MCPAgentLambda : lambda_handler() --> build_prompt()
-MCPAgentLambda : lambda_handler() --> extract_new_locator()
+class SemanticRetriever {
+    +get_past_fixes(error)
+}
+
+class BedrockLLM {
+    +generate(prompt)
+}
+
+class LocatorExtractor {
+    +extract(model_response)
+}
+
+MCPAgentLambda : lambda_handler() --> SemanticRetriever : get_past_fixes(error)
+MCPAgentLambda : lambda_handler() --> build_prompt(event, past_fixes)
+MCPAgentLambda : lambda_handler() --> BedrockLLM : generate(prompt)
+MCPAgentLambda : lambda_handler() --> extract_new_locator(model_response)
+MCPAgentLambda : lambda_handler() --> format_response(suggestion, locator)
+
 @enduml

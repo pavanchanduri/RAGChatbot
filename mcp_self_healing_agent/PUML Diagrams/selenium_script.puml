@@ -1,41 +1,33 @@
-@startuml SelfHealingSeleniumAgent
-title Self-Healing Selenium Agent Script Flow
 
-start
+@startuml SelfHealingSeleniumE2E
+title Self-Healing Selenium Script - End to End Flow
 
-:runTest(byType, locator);
-if (Test passes?) then (yes)
-    :Return null;
-else (no)
-    :Collect error, stack trace, DOM snapshot;
-    :Return failure context as map;
-endif
+actor "Test Automation" as TestRunner
+entity "Selenium Script" as Selenium
+entity "MCP Agent Lambda" as Lambda
+entity "Bedrock LLM (LangChain)" as LLM
+entity "Locator Extractor" as LocatorExtract
+database "FixesStore (KB)" as KB
 
-:selfHeal(args);
-:Call runTest(null, null);
-if (result != null?) then (yes)
-    :Send failure context to Lambda via API Gateway;
-    :Receive Lambda suggestion;
-    if (new_locator in Lambda response?) then (yes)
-        :Parse new_locator;
-        :Check for past fixes in FixesStore;
-        if (Past fix found and passes?) then (yes)
-            :Test passed after applying past fix;
-        else (no)
-            :Rerun runTest(byType, value) with Lambda suggestion;
-            if (Test passes after fix?) then (yes)
-                :Save fix to knowledge base (FixesStore);
-            else (no)
-                :Test still failed after applying Lambda suggestion;
-            endif
-        endif
-    else (no)
-        :No valid locator suggested by Lambda;
-    endif
-else (no)
-    :Test passed, no Lambda call needed;
-endif
+TestRunner --> Selenium : Run test (byType, locator)
+Selenium --> TestRunner : Test result (pass/fail)
+Selenium --> Lambda : Send failure context (error, stack, DOM)
+Lambda --> LLM : Build prompt, request fix suggestion
+LLM --> Lambda : Return fix suggestion (code, locator)
+Lambda --> LocatorExtract : Extract new locator
+LocatorExtract --> Lambda : Return new locator
+Lambda --> Selenium : Return fix suggestion, new locator
+Selenium --> KB : Check for past fixes
+KB --> Selenium : Return past fix (if any)
+Selenium --> TestRunner : Test result after self-heal
+Selenium --> KB : Save successful fix
 
-stop
+note right of Selenium
+- Runs test and collects failure context
+- Sends failure to Lambda
+- Receives fix suggestion and locator
+- Checks/saves fixes in KB
+- Reruns test with fix
+end note
 
 @enduml
