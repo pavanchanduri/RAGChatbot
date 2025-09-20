@@ -1,6 +1,7 @@
 @startuml PreprocessingScript
 title RAG Preprocessing Script (LangChain + OpenSearch)
 
+
 actor "EventBridge/S3" as Trigger
 database "S3 Bucket" as S3
 database "OpenSearch" as OS
@@ -8,9 +9,11 @@ entity "Lambda Function" as Lambda
 entity "Bedrock Embeddings" as Bedrock
 entity "LangChain TextSplitter" as Splitter
 entity "BeautifulSoup" as Soup
+entity "PDFLoader/TextLoader/WordLoader" as Loader
 
 Trigger --> Lambda : Invoke (event)
-Lambda --> S3 : List/Get text files
+Lambda --> S3 : List/Get files (.txt, .pdf, .doc, .docx, ...)
+Lambda --> Loader : Load and extract text
 Lambda --> Soup : Scrape web pages
 Lambda --> Splitter : Chunk text
 Lambda --> Bedrock : Generate embeddings
@@ -18,8 +21,9 @@ Lambda --> OS : Upsert chunks + vectors
 
 note right of Lambda
 - Detect trigger type
-- For S3: process text files
+- For S3: process .txt, .pdf, .doc, .docx, etc.
 - For schedule: scrape web pages
+- Use appropriate loader for each file type
 - Chunk, embed, upsert
 end note
 

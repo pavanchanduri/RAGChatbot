@@ -4,18 +4,18 @@ RAG Preprocessing Script (LangChain + OpenSearch)
 
 Overview:
 ---------
-This script preprocesses knowledge base sources (S3 text files and web pages), chunks and embeds their content, 
-and stores the resulting vectors in an OpenSearch index for retrieval-augmented generation (RAG) chatbots. 
+This script preprocesses knowledge base sources (S3 files: .txt, .pdf, .doc, .docx and web pages), chunks and embeds their content,
+and stores the resulting vectors in an OpenSearch index for retrieval-augmented generation (RAG) chatbots.
 It is designed to run as an AWS Lambda function, triggered by S3 events or scheduled via EventBridge.
 
 Flow Summary:
 -------------
 1. **Trigger**: Invoked by S3 event (file upload) or scheduled EventBridge rule.
 2. **Source Selection**:
-    - S3 trigger: Processes all text files in the S3 bucket.
+    - S3 trigger: Processes all .txt, .pdf, .doc, and .docx files in the S3 bucket.
     - Scheduled trigger: Scrapes and processes specified web pages.
 3. **Text Loading & Chunking**:
-    - Loads text from S3 or scraped web page.
+    - Loads text from S3 (.txt, .pdf, .doc, .docx) or scraped web page.
     - Splits text into overlapping chunks using LangChain's `RecursiveCharacterTextSplitter`.
     - Each chunk is tagged with metadata (source filename or URL).
 4. **Embedding Generation**:
@@ -29,7 +29,9 @@ Flow Summary:
 
 Key Components:
 ---------------
-- **TextLoader**: Loads text files (LangChain loader, not used directly here but referenced).
+- **TextLoader**: Loads text files.
+- **PDFLoader**: Loads PDF files.
+- **UnstructuredWordDocumentLoader**: Loads .doc and .docx files.
 - **RecursiveCharacterTextSplitter**: Splits text into manageable, overlapping chunks for embedding.
 - **BedrockEmbeddings**: LangChain wrapper for Cohere embedding model on AWS Bedrock.
 - **OpenSearchVectorSearch**: LangChain abstraction for vector similarity search and upsert in OpenSearch.
@@ -46,8 +48,8 @@ Detailed Step-by-Step Flow:
 
 3. **S3 File Processing**
     - List all objects in the S3 bucket.
-    - For each `.txt` file:
-      - Download and decode text.
+    - For each `.txt`, `.pdf`, `.doc`, `.docx` file:
+      - Download and decode text (using appropriate loader).
       - Split into chunks with metadata.
       - Embed and upsert each chunk into OpenSearch.
 
@@ -84,7 +86,8 @@ Dependencies:
 - urllib3
 - langchain-community
 - opensearch-py
-
+- PyPDF2
+- unstructured
 """
 # This script preprocesses text files from S3, chunks, cleans, embeds, and stores them in OpenSearch (vector DB).
 #
@@ -118,7 +121,7 @@ import os
 import requests
 from bs4 import BeautifulSoup
 import urllib3
-from langchain_community.document_loaders import TextLoader
+from langchain_community.document_loaders import TextLoader, PDFLoader, UnstructuredWordDocumentLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_community.vectorstores import OpenSearchVectorSearch
@@ -177,16 +180,40 @@ def load_and_split_text(text, source):
     docs = text_splitter.create_documents([text], metadatas=[{"source": source}])
     return docs
 
+
 def process_s3_files():
     objects = s3.list_objects_v2(Bucket=bucket)
     for obj in objects.get("Contents", []):
         key = obj["Key"]
-        if key == "kb_index.json" or not key.strip().lower().endswith(".txt"):
+        if key == "kb_index.json":
             continue
-        print(f"Processing text file: {key}")
-        file_obj = s3.get_object(Bucket=bucket, Key=key)
-        text = file_obj["Body"].read().decode("utf-8")
-        docs = load_and_split_text(text, key)
+        ext = key.strip().lower().split('.')[-1]
+        print(f"Processing file: {key}")
+        text = None
+        docs = []
+        try:
+            file_obj = s3.get_object(Bucket=bucket, Key=key)
+            if ext == "txt":
+                text = file_obj["Body"].read().decode("utf-8")
+                docs = load_and_split_text(text, key)
+            elif ext == "pdf":
+                with open("/tmp/temp.pdf", "wb") as f:
+                    f.write(file_obj["Body"].read())
+                loader = PDFLoader("/tmp/temp.pdf")
+                docs = loader.load()
+                # Add source metadata
+                for d in docs:
+                    d.metadata["source"] = key
+            elif ext in ["doc", "docx"]:
+                with open(f"/tmp/temp.{ext}", "wb") as f:
+                    f.write(file_obj["Body"].read())
+                loader = UnstructuredWordDocumentLoader(f"/tmp/temp.{ext}")
+                docs = loader.load()
+                for d in docs:
+                    d.metadata["source"] = key
+        except Exception as e:
+            print(f"Failed to process {key}: {e}")
+            continue
         if docs:
             OpenSearchVectorSearch.from_documents(
                 docs,
@@ -197,7 +224,7 @@ def process_s3_files():
                 use_ssl=True,
                 verify_certs=True,
             )
-        print(f"Indexed {len(docs)} chunks from {key}")
+            print(f"Indexed {len(docs)} chunks from {key}")
 
 def scrape_webpage(url):
     try:
