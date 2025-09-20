@@ -1,14 +1,16 @@
 
 
 """
-LLM Test Case Generator Lambda (with RAG)
-=========================================
+
+LLM Test Case Generator Lambda (with RAG & LangChain)
+=====================================================
 
 Overview:
 ---------
 This AWS Lambda function generates high-level functional and non-functional test cases from user-provided requirements/specifications.
 It uses Retrieval-Augmented Generation (RAG) by incorporating relevant context from a knowledge base (KB) of similar projects, indexed in OpenSearch.
 The generated test cases are validated by a second LLM call for correctness and completeness.
+LangChain is used for LLM invocation, prompt management, and chaining, providing a modular and extensible approach to prompt engineering and model calls.
 
 Flow Summary:
 -------------
@@ -20,12 +22,12 @@ Flow Summary:
     - KB context is concatenated and included in the LLM prompt.
 3. **Conversation History**:
     - Loads the last 10 exchanges from DynamoDB for session continuity.
-4. **Prompt Construction**:
-    - Builds a prompt for the LLM (Claude via Bedrock) including history, specification, and KB context.
-5. **Test Case Generation**:
-    - Invokes the LLM to generate test cases based on the prompt.
-6. **Validation**:
-    - Invokes the LLM again to review and validate the generated test cases.
+4. **Prompt Construction (LangChain)**:
+    - Uses LangChain's `PromptTemplate` to build prompts for the LLM, including history, specification, and KB context.
+5. **Test Case Generation (LangChain)**:
+    - Invokes the LLM (Claude via Bedrock) using LangChain's `LLMChain` abstraction to generate test cases based on the prompt.
+6. **Validation (LangChain)**:
+    - Invokes the LLM again (via LangChain) to review and validate the generated test cases.
 7. **History Update**:
     - Saves the latest user/bot exchange to DynamoDB.
 8. **Response**:
@@ -37,9 +39,10 @@ Supported Document Formats:
 - .docx (Word, using python-docx)
 - .pdf (PDF, using PyPDF2)
 
-RAG Integration:
----------------
+RAG & LangChain Integration:
+---------------------------
 - KB context is retrieved from OpenSearch using semantic vector search (via LangChain and Bedrock embeddings).
+- LangChain is used for prompt management, LLM invocation, and chaining (LLMChain, PromptTemplate).
 - The KB is built by a separate preprocessing script that indexes project documents and webpages.
 
 Dependencies:
@@ -48,6 +51,7 @@ Dependencies:
 - python-docx
 - PyPDF2
 - kb_retriever (utility for OpenSearch KB retrieval)
+- langchain-community (for LLM, prompt, and chain abstractions)
 
 Usage:
 ------
@@ -63,6 +67,11 @@ import base64
 from uuid import uuid4
 import os
 from kb_retriever import retrieve_kb_context
+
+# LangChain imports
+from langchain_community.llms import Bedrock
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
 
 try:
     import docx
@@ -110,6 +119,7 @@ def extract_text_from_pdf(pdf_bytes):
             text.append(page_text)
     return "\n".join(text)
 
+
 def lambda_handler(event, context):
     print("EVENT:", json.dumps(event))
 
@@ -134,9 +144,6 @@ def lambda_handler(event, context):
     document = data.get("document", "")
     filename = data.get("filename", "")
     session_id = data.get("sessionId") or str(uuid4())
-    region = "us-west-2"
-    print("Connecting to Bedrock...")
-    bedrock = boto3.client("bedrock-runtime", region_name=region)
 
     if not document:
         print("No document provided")
@@ -145,7 +152,6 @@ def lambda_handler(event, context):
             "headers": {"Access-Control-Allow-Origin": "*"},
             "body": json.dumps({"error": "No document provided"})
         }
-
 
     # Try to extract text based on file extension
     extracted_text = ""
@@ -194,60 +200,45 @@ def lambda_handler(event, context):
     for turn in recent_history:
         history_text += f"User: {turn['user']}\nBot: {turn['bot']}\n"
 
-
-    # Compose prompt for Claude with KB context
-    prompt = (
-        f"{history_text}"
-        f"You are an expert QA engineer. Given the following requirements/specifications and relevant context from similar projects, generate high level functional and non-functional test cases and include some typical edge cases also:\n\n"
-        f"Project/Spec:\n{extracted_text}\n\n"
-        f"Relevant KB Context:\n{kb_context}"
+    # LangChain Bedrock LLM setup
+    llm = Bedrock(
+        model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
+        region_name="us-west-2",
+        max_tokens=8092,
+        temperature=0.2,
     )
 
-    native_request = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 8092,
-        "temperature": 0.2,
-        "messages": [
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": prompt}],
-            }
-        ],
-    }
-    request = json.dumps(native_request)
-    try:
-        print("Invoking Bedrock for test case generation...")
-        response = bedrock.invoke_model(
-            modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
-            body=request
+    # Prompt for test case generation
+    prompt_template = PromptTemplate(
+        input_variables=["history_text", "extracted_text", "kb_context"],
+        template=(
+            "{history_text}"
+            "You are an expert QA engineer. Given the following requirements/specifications and relevant context from similar projects, generate high level functional and non-functional test cases and include some typical edge cases also:\n\n"
+            "Project/Spec:\n{extracted_text}\n\n"
+            "Relevant KB Context:\n{kb_context}"
         )
-        model_response = json.loads(response["body"].read())
-        response_text = model_response["content"][0]["text"]
-        print("Bedrock response (first 200 chars):", response_text[:200])
+    )
+    chain = LLMChain(llm=llm, prompt=prompt_template)
+    try:
+        print("Invoking LangChain Bedrock for test case generation...")
+        response_text = chain.run(
+            history_text=history_text,
+            extracted_text=extracted_text,
+            kb_context=kb_context
+        )
+        print("LangChain response (first 200 chars):", response_text[:200])
 
         # Validation step: Ask Claude to review the generated test cases
-        validation_prompt = (
-            "You are an expert QA engineer. Review the following test cases for correctness, completeness, and relevance. Point out any issues or improvements.\n\n"
-            f"{response_text}"
+        validation_prompt_template = PromptTemplate(
+            input_variables=["response_text"],
+            template=(
+                "You are an expert QA engineer. Review the following test cases for correctness, completeness, and relevance. Point out any issues or improvements.\n\n"
+                "{response_text}"
+            )
         )
-        validation_request = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 2048,
-            "temperature": 0.2,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "text": validation_prompt}],
-                }
-            ],
-        }
-        print("Invoking Bedrock for test case validation...")
-        validation_response = bedrock.invoke_model(
-            modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
-            body=json.dumps(validation_request)
-        )
-        validation_model_response = json.loads(validation_response["body"].read())
-        validation_text = validation_model_response["content"][0]["text"]
+        validation_chain = LLMChain(llm=llm, prompt=validation_prompt_template)
+        print("Invoking LangChain Bedrock for test case validation...")
+        validation_text = validation_chain.run(response_text=response_text)
         print("Validation feedback (first 200 chars):", validation_text[:200])
 
         # Update and save conversation history
@@ -265,7 +256,7 @@ def lambda_handler(event, context):
         }
     except Exception as e:
         import traceback
-        print("BEDROCK ERROR:", str(e))
+        print("LANGCHAIN BEDROCK ERROR:", str(e))
         traceback.print_exc()
         return {
             "statusCode": 500,

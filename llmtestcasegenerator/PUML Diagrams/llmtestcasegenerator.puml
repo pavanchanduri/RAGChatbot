@@ -3,31 +3,62 @@ title RAG LLM Test Case Generator Lambda (LangChain + OpenSearch)
 
 actor "User/API Gateway" as User
 entity "TestCaseGenerator Lambda" as Lambda
-entity "Bedrock Embeddings" as BedrockEmbed
-entity "OpenSearchVectorSearch (LangChain)" as VectorSearch
-database "OpenSearch" as OS
+entity "RAG Preprocessing Lambda" as Preprocess
+entity "Bedrock Embeddings (LangChain)" as BedrockEmbed
+entity "LangChain VectorSearch" as VectorSearch
+database "OpenSearch Index" as OS
 database "DynamoDB" as Dynamo
+entity "LangChain PromptTemplate" as PromptTemplate
+entity "LangChain LLMChain" as LLMChain
 entity "Claude LLM (Bedrock)" as Claude
 
+'--- RAG Preprocessing Flow ---
+Preprocess --> BedrockEmbed : Generate embeddings for KB chunks
+Preprocess --> OS : Upsert KB chunks + embeddings
+Preprocess --> OS : Store metadata (filename, ETag, etc.)
+
+'--- Test Case Generation Flow ---
 User --> Lambda : Send document, filename, session_id
+Lambda --> Dynamo : Get recent conversation history
+Lambda --> Lambda : Extract text from document
 Lambda --> BedrockEmbed : Generate embedding for extracted text
 Lambda --> VectorSearch : Query top-k similar KB chunks
 VectorSearch --> OS : Vector similarity search
-Lambda --> Dynamo : Get recent conversation history
-Lambda --> Claude : Send prompt + KB context + history
-Claude --> Lambda : Return test cases
-Lambda --> Claude : Send test cases for validation
-Claude --> Lambda : Return validation feedback
+Lambda --> PromptTemplate : Build prompt with KB context + history
+Lambda --> LLMChain : Chain prompt to Claude LLM
+LLMChain --> Claude : Send prompt for test case generation
+Claude --> LLMChain : Return test cases
+LLMChain --> Lambda : Receive test cases
+Lambda --> PromptTemplate : Build validation prompt
+Lambda --> LLMChain : Chain validation prompt to Claude LLM
+LLMChain --> Claude : Send test cases for validation
+Claude --> LLMChain : Return validation feedback
+LLMChain --> Lambda : Receive validation feedback
 Lambda --> Dynamo : Save updated history
 Lambda --> User : Return test cases + validation feedback
 
+note right of Preprocess
+RAG Preprocessing Lambda:
+- Loads KB documents/webpages
+- Chunks, embeds, and upserts to OpenSearch
+- Stores metadata for efficient retrieval
+end note
+
 note right of Lambda
+TestCaseGenerator Lambda:
 - Receives document/filename/session_id
 - Extracts text from document
-- Embeds text and retrieves KB context
-- Loads/saves history
-- Builds prompt for Claude
+- Embeds text and retrieves KB context (LangChain)
+- Loads/saves history (DynamoDB)
+- Builds prompt (PromptTemplate)
+- Chains prompt to Claude (LLMChain)
 - Returns test cases and validation
+end note
+
+note right of Claude
+Claude LLM (Bedrock):
+- Generates test cases
+- Validates test cases
 end note
 
 @enduml
