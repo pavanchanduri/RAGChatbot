@@ -141,6 +141,10 @@ EMBEDDING_DIM = 1024  # Cohere v3 embedding size
 OPENSEARCH_USER = os.environ.get("OPENSEARCH_USER")
 OPENSEARCH_PASS = os.environ.get("OPENSEARCH_PASS")
 
+# OpenSearch client setup
+"""
+This client is used to interact with the OpenSearch service.
+"""
 opensearch_client = OpenSearch(
     hosts=[{"host": OPENSEARCH_HOST, "port": OPENSEARCH_PORT}],
     http_auth=(OPENSEARCH_USER, OPENSEARCH_PASS),
@@ -150,6 +154,9 @@ opensearch_client = OpenSearch(
 )
 
 # Create index if not exists (with k-NN enabled)
+"""
+This creates the OpenSearch index with the necessary settings and mappings.
+"""
 if not opensearch_client.indices.exists(OPENSEARCH_INDEX):
     index_body = {
         "settings": {
@@ -170,17 +177,29 @@ if not opensearch_client.indices.exists(OPENSEARCH_INDEX):
     }
     opensearch_client.indices.create(OPENSEARCH_INDEX, body=index_body)
 
+# S3 client creation
 s3 = boto3.client("s3")
 bucket = "test-bucket-chatbot-321"
 
+# Embedding model setup
+# Uses RecursiveCharacterTextSplitter to chunk text into manageable pieces
 bedrock_embeddings = BedrockEmbeddings(model_id="cohere.embed-english-v3", region_name="us-west-2")
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
 
+# Helper functions to load and split text
+# Loads text and splits into chunks with metadata
 def load_and_split_text(text, source):
     docs = text_splitter.create_documents([text], metadatas=[{"source": source}])
     return docs
 
-
+# Process S3 files
+"""
+1. List all objects in the S3 bucket.
+2. For each .txt, .pdf, .doc, .docx file:
+   - Download and decode text (using appropriate loader).
+   - Split into chunks with metadata.
+   - Embed and upsert each chunk into OpenSearch.
+"""
 def process_s3_files():
     objects = s3.list_objects_v2(Bucket=bucket)
     for obj in objects.get("Contents", []):
