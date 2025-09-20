@@ -14,6 +14,8 @@ entity "PDFLoader/TextLoader/WordLoader" as Loader
 Trigger --> Lambda : Invoke (event)
 Lambda --> S3 : List/Get files (.txt, .pdf, .doc, .docx, ...)
 Lambda --> Loader : Load and extract text
+Lambda --> OS : Check ETag for file
+OS --> Lambda : ETag match? (skip if yes)
 Lambda --> Soup : Scrape web pages
 Lambda --> Splitter : Chunk text
 Lambda --> Bedrock : Generate embeddings
@@ -24,7 +26,9 @@ note right of Lambda
 - For S3: process .txt, .pdf, .doc, .docx, etc.
 - For schedule: scrape web pages
 - Use appropriate loader for each file type
-- Chunk, embed, upsert
+- For S3: check ETag in OpenSearch before indexing
+- Skip unchanged files, delete old chunks for updated files
+- Chunk, embed, upsert (store ETag in metadata)
 end note
 
 @enduml

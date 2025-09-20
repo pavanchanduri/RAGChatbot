@@ -8,22 +8,28 @@ This script preprocesses knowledge base sources (S3 files: .txt, .pdf, .doc, .do
 and stores the resulting vectors in an OpenSearch index for retrieval-augmented generation (RAG) chatbots.
 It is designed to run as an AWS Lambda function, triggered by S3 events or scheduled via EventBridge.
 
+
 Flow Summary:
 -------------
-1. **Trigger**: Invoked by S3 event (file upload) or scheduled EventBridge rule.
+1. **Trigger**: Invoked by S3 event (file upload/update) or scheduled EventBridge rule.
 2. **Source Selection**:
-    - S3 trigger: Processes all .txt, .pdf, .doc, and .docx files in the S3 bucket.
+    - S3 trigger: Processes only the updated .txt, .pdf, .doc, and .docx files in the S3 bucket (using S3 event data).
     - Scheduled trigger: Scrapes and processes specified web pages.
-3. **Text Loading & Chunking**:
+3. **Change Detection & Efficient Indexing**:
+    - For each S3 file, retrieves its ETag (content hash).
+    - Checks OpenSearch for existing chunks with the same filename and ETag.
+    - If already indexed, skips re-indexing.
+    - If changed, deletes old chunks for the file and indexes new ones, storing ETag in metadata.
+4. **Text Loading & Chunking**:
     - Loads text from S3 (.txt, .pdf, .doc, .docx) or scraped web page.
     - Splits text into overlapping chunks using LangChain's `RecursiveCharacterTextSplitter`.
-    - Each chunk is tagged with metadata (source filename or URL).
-4. **Embedding Generation**:
+    - Each chunk is tagged with metadata (source filename or URL, and ETag for S3 files).
+5. **Embedding Generation**:
     - Uses LangChain's `BedrockEmbeddings` (Cohere embed-english-v3 via AWS Bedrock) to generate a vector for each chunk.
-5. **Vector Upsert to OpenSearch**:
+6. **Vector Upsert to OpenSearch**:
     - Chunks and their embeddings are upserted into OpenSearch using LangChain's `OpenSearchVectorSearch` abstraction.
     - If the index does not exist, it is created with k-NN enabled for vector search.
-6. **Completion**:
+7. **Completion**:
     - Logs the number of chunks indexed per source.
     - Ready for retrieval by downstream RAG chatbot.
 
@@ -37,20 +43,24 @@ Key Components:
 - **OpenSearchVectorSearch**: LangChain abstraction for vector similarity search and upsert in OpenSearch.
 - **OpenSearch**: AWS-managed vector database for fast similarity search.
 
+
 Detailed Step-by-Step Flow:
 --------------------------
 1. **Script/Lambda Entry**
     - Entry point is `main(event)` or `lambda_handler(event, context)`.
 
 2. **Trigger Detection**
-    - If the event is an S3 trigger, process S3 files.
+    - If the event is an S3 trigger, process only the updated S3 files referenced in the event.
     - Otherwise, process web pages (scheduled run).
 
-3. **S3 File Processing**
-    - List all objects in the S3 bucket.
-    - For each `.txt`, `.pdf`, `.doc`, `.docx` file:
+3. **S3 File Change Detection & Processing**
+    - For each updated S3 file:
+      - Retrieve its ETag (content hash).
+      - Query OpenSearch for chunks with the same filename and ETag.
+      - If found, skip re-indexing.
+      - If not found or changed, delete old chunks for the file and index new ones, storing ETag in metadata.
       - Download and decode text (using appropriate loader).
-      - Split into chunks with metadata.
+      - Split into chunks with metadata (filename and ETag).
       - Embed and upsert each chunk into OpenSearch.
 
 4. **Web Page Processing**
@@ -61,7 +71,7 @@ Detailed Step-by-Step Flow:
 
 5. **OpenSearch Index Management**
     - Checks if the index exists; creates it with k-NN enabled if not.
-    - Index mapping includes vector, text, and source metadata fields.
+    - Index mapping includes vector, text, source, and ETag metadata fields.
 
 6. **Embedding and Upsert**
     - For each chunk, generates embedding using Bedrock/Cohere.
@@ -121,7 +131,7 @@ import os
 import requests
 from bs4 import BeautifulSoup
 import urllib3
-from langchain_community.document_loaders import TextLoader, PDFLoader, UnstructuredWordDocumentLoader
+from langchain_community.document_loaders import PDFLoader, UnstructuredWordDocumentLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_community.vectorstores import OpenSearchVectorSearch
@@ -200,29 +210,69 @@ def load_and_split_text(text, source):
    - Split into chunks with metadata.
    - Embed and upsert each chunk into OpenSearch.
 """
-def process_s3_files():
-    objects = s3.list_objects_v2(Bucket=bucket)
-    for obj in objects.get("Contents", []):
-        key = obj["Key"]
+def process_s3_files(event=None):
+    # Determine which files to process and their ETags
+    keys_to_process = []
+    etags = {}
+    if event and 'Records' in event:
+        for record in event['Records']:
+            s3_info = record['s3']
+            key = s3_info['object']['key']
+            etag = s3_info['object'].get('eTag')
+            keys_to_process.append(key)
+            etags[key] = etag
+    else:
+        objects = s3.list_objects_v2(Bucket=bucket)
+        for obj in objects.get("Contents", []):
+            key = obj["Key"]
+            etag = obj.get("ETag")
+            keys_to_process.append(key)
+            etags[key] = etag
+
+    for key in keys_to_process:
         if key == "kb_index.json":
             continue
         ext = key.strip().lower().split('.')[-1]
-        print(f"Processing file: {key}")
-        text = None
+        etag = etags.get(key)
+        print(f"Processing file: {key} (ETag: {etag})")
+        # Query OpenSearch for existing chunks with this key and ETag
+        query = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {"term": {"source": key}},
+                        {"term": {"etag": etag}}
+                    ]
+                }
+            }
+        }
+        results = opensearch_client.search(index=OPENSEARCH_INDEX, body=query)
+        if results['hits']['total']['value'] > 0:
+            print(f"File {key} with ETag {etag} already indexed. Skipping.")
+            continue  # Already indexed, skip
+
+        # Delete old chunks for this key (if any)
+        delete_query = {
+            "query": {
+                "term": {"source": key}
+            }
+        }
+        opensearch_client.delete_by_query(index=OPENSEARCH_INDEX, body=delete_query)
+
         docs = []
         try:
             file_obj = s3.get_object(Bucket=bucket, Key=key)
             if ext == "txt":
                 text = file_obj["Body"].read().decode("utf-8")
-                docs = load_and_split_text(text, key)
+                docs = text_splitter.create_documents([text], metadatas=[{"source": key, "etag": etag}])
             elif ext == "pdf":
                 with open("/tmp/temp.pdf", "wb") as f:
                     f.write(file_obj["Body"].read())
                 loader = PDFLoader("/tmp/temp.pdf")
                 docs = loader.load()
-                # Add source metadata
                 for d in docs:
                     d.metadata["source"] = key
+                    d.metadata["etag"] = etag
             elif ext in ["doc", "docx"]:
                 with open(f"/tmp/temp.{ext}", "wb") as f:
                     f.write(file_obj["Body"].read())
@@ -230,6 +280,7 @@ def process_s3_files():
                 docs = loader.load()
                 for d in docs:
                     d.metadata["source"] = key
+                    d.metadata["etag"] = etag
         except Exception as e:
             print(f"Failed to process {key}: {e}")
             continue
@@ -243,7 +294,7 @@ def process_s3_files():
                 use_ssl=True,
                 verify_certs=True,
             )
-            print(f"Indexed {len(docs)} chunks from {key}")
+            print(f"Indexed {len(docs)} chunks from {key} (ETag: {etag})")
 
 def scrape_webpage(url):
     try:
