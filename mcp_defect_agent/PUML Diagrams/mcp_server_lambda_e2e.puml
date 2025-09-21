@@ -1,23 +1,37 @@
 @startuml MCPDefectAgentLambdaE2E
-title MCP Defect Agent Lambda - Failure Ingestion Flow
+title MCP Defect Agent Lambda - Agentic RAG End-to-End Flow
 
 actor "User/API Gateway" as User
 entity "MCP Server Lambda" as Lambda
 database "DynamoDB" as Dynamo
 entity "JIRA API" as JIRA
+entity "OpenSearch (Vector DB)" as OpenSearch
+entity "Bedrock LLM" as BedrockLLM
+entity "Preprocessing Script" as Preprocess
+entity "Web/Docs/Test Cases" as Sources
 
 User --> Lambda : Send failure report (test_name, error, stack_trace)
+Preprocess --> Sources : Read project docs, test cases, web sources
+Preprocess --> OpenSearch : Index embeddings (ETag triggers, change detection)
 Lambda --> Dynamo : Check for duplicate defect
-Lambda --> Lambda : Summarize defect (Bedrock LLM)
+Lambda --> OpenSearch : Retrieve semantic project context
+Lambda --> BedrockLLM : Summarize defect (context-aware prompt)
 Lambda --> Dynamo : Log defect
 Lambda --> JIRA : Create JIRA issue
 JIRA --> Lambda : Return JIRA result
 Lambda --> User : Return defect/JIRA details
 
+note right of Preprocess
+- Reads TXT, PDF, JSON, and web sources
+- Uses ETag for web change detection
+- Indexes embeddings in OpenSearch
+end note
+
 note right of Lambda
 - Receives failure report
 - Checks for duplicate
-- Summarizes defect
+- Retrieves semantic project context
+- Summarizes defect with context-aware LLM
 - Logs defect in DynamoDB
 - Creates JIRA issue
 - Returns result to user

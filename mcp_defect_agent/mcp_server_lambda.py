@@ -1,24 +1,25 @@
 
 """
-MCP Defect Agent Lambda Server (LangChain Version)
--------------------------------------------------
+MCP Defect Agent Lambda Server (Agentic RAG Version)
+----------------------------------------------------
 
 Overview:
 ---------
-This AWS Lambda function ingests defect reports from test automation or CI pipelines via API Gateway, deduplicates them, summarizes using a Bedrock LLM (via LangChain), logs unique defects to DynamoDB, and creates JIRA issues for tracking.
+This AWS Lambda function ingests defect reports from test automation or CI pipelines via API Gateway, deduplicates them, retrieves semantic project context (requirements, policies, test cases) from OpenSearch, summarizes using a Bedrock LLM (via LangChain), logs unique defects to DynamoDB, and creates JIRA issues for tracking.
 
-End-to-End Flow:
-----------------
+End-to-End Agentic RAG Flow:
+----------------------------
 1. **API Gateway Ingestion**: Receives a JSON payload with test failure details (test_name, error, stack_trace).
 2. **Deduplication**: Checks DynamoDB for existing defects with the same test_name and error. If found, returns a duplicate message.
-3. **LLM Summarization (LangChain)**: Uses LangChain's Bedrock integration to summarize the defect, producing a title, description, and severity.
-4. **DynamoDB Logging**: Stores the unique defect with all details in DynamoDB for analytics and tracking.
-5. **JIRA Integration**: Creates a JIRA issue using the Atlassian REST API and Atlassian Document Format for the description.
-6. **Response**: Returns a JSON response with defect and JIRA issue details.
+3. **Semantic Retrieval (OpenSearch)**: Retrieves relevant project documents and test cases from OpenSearch using vector embeddings (preprocessed via RAGPreprocessingScript).
+4. **Context-Aware LLM Summarization (LangChain)**: Uses LangChain's Bedrock integration to summarize the defect, incorporating retrieved project context for improved accuracy. Produces a title, description, and severity.
+5. **DynamoDB Logging**: Stores the unique defect with all details in DynamoDB for analytics and tracking.
+6. **JIRA Integration**: Creates a JIRA issue using the Atlassian REST API and Atlassian Document Format for the description.
+7. **Response**: Returns a JSON response with defect and JIRA issue details.
 
 Configuration:
 --------------
-- DynamoDB table name, JIRA credentials, and project key are set via environment variables.
+- DynamoDB table name, JIRA credentials, OpenSearch host/port/index, and project key are set via environment variables.
 - Bedrock model and region are configurable in the code.
 
 Dependencies:
@@ -26,12 +27,14 @@ Dependencies:
 - boto3
 - requests
 - langchain-community
+- opensearch-py
 
 Usage:
 ------
-1. Deploy as an AWS Lambda function behind API Gateway.
-2. Set required environment variables for DynamoDB and JIRA.
-3. Integrate with test runners or CI/CD pipelines for automated defect management.
+1. Preprocess project documents and test cases using `RAGPreprocessingScript.py` to index context in OpenSearch for semantic retrieval.
+2. Deploy this script as an AWS Lambda function behind API Gateway.
+3. Set required environment variables for DynamoDB, JIRA, and OpenSearch.
+4. Integrate with test runners or CI/CD pipelines for automated, context-aware defect management.
 
 """
 
@@ -43,6 +46,9 @@ import requests
 from datetime import datetime, timezone
 from langchain_community.llms import Bedrock
 from langchain.prompts import PromptTemplate
+# --- Agentic RAG additions ---
+from langchain_community.embeddings import BedrockEmbeddings
+from langchain_community.vectorstores import OpenSearchVectorSearch
 
 # DynamoDB table name (no sensitive default)
 DEFECT_TABLE = os.environ.get('DEFECT_TABLE')
@@ -57,6 +63,35 @@ JIRA_PROJECT_KEY = os.environ.get('JIRA_PROJECT_KEY')
 print(f"JIRA_URL: {JIRA_URL}, JIRA_USER: {JIRA_USER}, JIRA_PROJECT_KEY: {JIRA_PROJECT_KEY}")
 
 
+def retrieve_project_context(test_name, error):
+    """
+    Retrieve relevant project documents and test cases from OpenSearch for context-aware RAG.
+    """
+    OPENSEARCH_HOST = os.environ.get('OPENSEARCH_HOST', 'localhost')
+    OPENSEARCH_PORT = int(os.environ.get('OPENSEARCH_PORT', 9200))
+    OPENSEARCH_INDEX = os.environ.get('OPENSEARCH_INDEX', 'defect_fixes')
+    BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'amazon.titan-embed-text-v1')
+    BEDROCK_REGION = os.environ.get('BEDROCK_REGION', 'us-west-2')
+    embeddings = BedrockEmbeddings(model_id=BEDROCK_MODEL_ID, region_name=BEDROCK_REGION)
+    vectorstore = OpenSearchVectorSearch(
+        opensearch_url=f"http://{OPENSEARCH_HOST}:{OPENSEARCH_PORT}",
+        index_name=OPENSEARCH_INDEX,
+        embedding=embeddings
+    )
+    # Query using test_name and error to retrieve relevant project context
+    query = f"Test: {test_name}\nError: {error}"
+    results = vectorstore.similarity_search(query, k=5)
+    context_blobs = []
+    for r in results:
+        meta = r.metadata
+        if meta.get('type') == 'document':
+            context_blobs.append(f"[Document: {meta.get('filename')}]\n{r.page_content}")
+        elif meta.get('type') == 'pdf':
+            context_blobs.append(f"[PDF: {meta.get('filename')} Page {meta.get('page', 0)}]\n{r.page_content}")
+        elif meta.get('type') == 'test_case':
+            context_blobs.append(f"[Test Case: {meta.get('filename')}]\n{r.page_content}")
+    return '\n---\n'.join(context_blobs) if context_blobs else ""
+
 def summarize_failure(test_name, error, stack_trace=None):
     """
     Summarize failure using Bedrock LLM via LangChain.
@@ -68,12 +103,15 @@ def summarize_failure(test_name, error, stack_trace=None):
         model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
         region_name="us-west-2"
     )
+    # Retrieve project context from OpenSearch
+    project_context = retrieve_project_context(test_name, error)
     prompt_template = PromptTemplate(
-        input_variables=["test_name", "error", "stack_trace"],
+        input_variables=["test_name", "error", "stack_trace", "project_context"],
         template=(
             "A test named '{test_name}' failed.\n"
             "Error: {error}\n"
             "Stack trace: {stack_trace}\n"
+            "Relevant project context (requirements, policies, test cases):\n{project_context}\n"
             "Please generate a defect summary with a title, description, and severity (High/Medium/Low). "
             "Respond in JSON with keys: title, description, severity."
         )
@@ -81,7 +119,8 @@ def summarize_failure(test_name, error, stack_trace=None):
     prompt = prompt_template.format(
         test_name=test_name,
         error=error,
-        stack_trace=stack_trace or ""
+        stack_trace=stack_trace or "",
+        project_context=project_context
     )
     try:
         text = llm(prompt)
@@ -183,7 +222,7 @@ def lambda_handler(event, context):
                 'body': json.dumps({'message': 'Duplicate defect. Not logged again.', 'defect_id': existing['Items'][0]['defect_id']})
             }
 
-        # Summarize defect using LLM
+        # Summarize defect using LLM (with context-aware RAG)
         summary_obj = summarize_failure(test_name, error, stack_trace)
         summary = summary_obj['title']
         description = summary_obj['description']
