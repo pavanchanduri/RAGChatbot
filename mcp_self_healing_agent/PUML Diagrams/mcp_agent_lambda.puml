@@ -1,29 +1,50 @@
-@startuml MCPAgentLambdaE2E
-title MCP Self-Healing Selenium Agent Lambda - End to End Flow
+@startuml mcp_agent_lambda
+' MCP Self-Healing Selenium Agent End-to-End Flow (LangChain + OpenSearch)
 
+title MCP Self-Healing Selenium Agent End-to-End Flow (LangChain + OpenSearch)
 
-actor "Test Automation" as TestRunner
-entity "MCP Agent Lambda" as Lambda
-entity "Semantic Retriever (LangChain+OpenSearch)" as Retriever
-entity "Bedrock LLM (LangChain)" as LLM
-entity "Locator Extractor" as LocatorExtract
+actor "Selenium Test Runner" as Selenium
+entity "Self-Healing Selenium Script" as Script
+entity "Self-Healing Lambda" as Lambda
+entity "LangChain PromptTemplate" as PromptTemplate
+entity "Bedrock Claude LLM" as Claude
 
-TestRunner --> Lambda : Send failure report (test_name, error, stack_trace, dom_snapshot)
-Lambda --> Retriever : Retrieve past fixes (semantic search)
-Retriever --> Lambda : Return relevant past fixes
-Lambda --> LLM : Build prompt (with context), request fix suggestion
-LLM --> Lambda : Return fix suggestion (Python code, locator, waits, etc.)
-Lambda --> LocatorExtract : Extract new locator from suggestion
-LocatorExtract --> Lambda : Return new locator
-Lambda --> TestRunner : Return fix suggestion, new locator
+database "OpenSearch Vector DB" as OS
+
+'--- Initial Test Run ---
+Selenium --> Script : Run test (with default/failing locator)
+Script --> Selenium : Test fails, capture error context
+
+'--- Lambda Invocation ---
+Selenium --> Lambda : Send test failure context (test name, error, stack, DOM)
+Lambda --> OS : Retrieve past fixes (semantic search)
+Lambda --> PromptTemplate : Build prompt with context + past fixes
+PromptTemplate --> Claude : Send prompt for self-healing suggestion
+Claude --> Lambda : Return suggestion (code, locator, wait)
+Lambda --> Selenium : Return suggestion + new locator
+
+'--- Rerun and Save Fix ---
+Selenium --> Script : Rerun test with suggested locator
+Script --> Selenium : Test passes (if fix works)
+Script --> OS : Save fix to vector DB (test name, error, suggestion)
+
+note right of Script
+- Runs initial test (intentional failure)
+- Captures error, stack, DOM
+- Reruns test with Lambda suggestion
+- Saves successful fix to vector DB
+end note
 
 note right of Lambda
-- Receives failure report
-- Retrieves past fixes using semantic search
-- Builds prompt for LLM with context
-- Gets suggestion from LLM
-- Extracts locator if present
-- Returns fix suggestion and locator
+- Receives test failure context
+- Retrieves past fixes from vector DB
+- Builds prompt for LLM
+- Returns suggestion to Selenium
+end note
+
+note right of Claude
+- Generates self-healing suggestion
+- Suggests locator/code/wait
 end note
 
 @enduml
